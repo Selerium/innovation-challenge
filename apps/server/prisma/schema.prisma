@@ -1,0 +1,306 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// AUTH (Better Auth tables)
+// ============================================
+
+model user {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  passwordHash  String?
+  name          String?
+  role          String    @default("STUDENT")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  profile       profile?
+  session       session[]
+  account       account[]
+
+  @@map("users")
+}
+
+model session {
+  id        String   @id
+  userId    String
+  user      user     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("sessions")
+}
+
+model account {
+  id                   String    @id
+  userId               String
+  user                 user      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId            String
+  providerId           String
+  accessToken          String?
+  refreshToken         String?
+  accessTokenExpiresAt DateTime?
+  scope                String?
+  idToken              String?
+  password             String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@map("accounts")
+}
+
+// ============================================
+// PROFILE
+// ============================================
+
+model profile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           user     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName    String
+  bio            String?
+  avatarUrl      String?
+  xp             Int      @default(0)
+  level          Int      @default(1)
+  onboardingDone Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  subjects              subject[]
+  studySession          studySession[]
+  assignmentSubmission  assignmentSubmission[]
+  createdAssignments    assignment[]
+  chatMessageSent       chatMessage[]     @relation("ChatSender")
+  chatMessageReceived   chatMessage[]     @relation("ChatReceiver")
+  tutoringRequestSent   tutoringRequest[] @relation("TutorRequester")
+  tutoringRequestTutor  tutoringRequest[] @relation("TutorAccept")
+  aiConversation        aiConversation[]
+  topicSuggestion       topicSuggestion[]
+  burnoutAlert          burnoutAlert[]
+  classMember           classMember[]
+  classTeaching         eduClass[]
+
+  @@map("profiles")
+}
+
+// ============================================
+// ACADEMICS
+// ============================================
+
+model subject {
+  id        String   @id @default(cuid())
+  profileId String
+  profile   profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name      String
+  grade     String
+  scope     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  topic           topic[]
+  assignment      assignment[]
+  aiConversation  aiConversation[]
+
+  @@unique([profileId, name, grade])
+  @@map("subjects")
+}
+
+model topic {
+  id        String     @id @default(cuid())
+  subjectId String
+  subject   subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  name      String
+  status    String     @default("NOT_STARTED")
+  progress  Int        @default(0)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  studySession              studySession[]
+  topicSuggestionSource     topicSuggestion[] @relation("SourceTopic")
+  topicSuggestionSuggested  topicSuggestion[] @relation("SuggestedTopic")
+
+  @@map("topics")
+}
+
+model studySession {
+  id              String   @id @default(cuid())
+  profileId       String
+  profile         profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  topicId         String
+  topic           topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  durationMinutes Int
+  xpEarned        Int
+  startedAt       DateTime
+  endedAt         DateTime
+  createdAt       DateTime @default(now())
+
+  @@map("study_sessions")
+}
+
+// ============================================
+// ASSIGNMENTS
+// ============================================
+
+model assignment {
+  id          String   @id @default(cuid())
+  subjectId   String
+  subject     subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  creatorId   String
+  creator     profile  @relation(fields: [creatorId], references: [id])
+  title       String
+  description String?
+  content     Json
+  dueDate     DateTime?
+  createdAt   DateTime @default(now())
+
+  submission assignmentSubmission[]
+
+  @@map("assignments")
+}
+
+model assignmentSubmission {
+  id             String   @id @default(cuid())
+  assignmentId   String
+  assignment     assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  profileId      String
+  profile        profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  content        String
+  aiScore        Int?
+  aiFeedback     String?
+  teacherScore   Int?
+  teacherComment String?
+  status         String   @default("SUBMITTED")
+  submittedAt    DateTime @default(now())
+  gradedAt       DateTime?
+
+  @@map("assignment_submissions")
+}
+
+// ============================================
+// AI CHAT (per user per subject)
+// ============================================
+
+model aiConversation {
+  id        String   @id @default(cuid())
+  profileId String
+  profile   profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  subjectId String
+  subject   subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  messages  Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([profileId, subjectId])
+  @@map("ai_conversations")
+}
+
+// ============================================
+// TOPIC SUGGESTIONS
+// ============================================
+
+model topicSuggestion {
+  id               String   @id @default(cuid())
+  profileId        String
+  profile          profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  sourceTopicId    String
+  sourceTopic      topic    @relation("SourceTopic", fields: [sourceTopicId], references: [id])
+  suggestedTopicId String?
+  suggestedTopic   topic?   @relation("SuggestedTopic", fields: [suggestedTopicId], references: [id])
+  name             String
+  description      String?
+  accepted         Boolean?
+  createdAt        DateTime @default(now())
+
+  @@map("topic_suggestions")
+}
+
+// ============================================
+// BURNOUT DETECTION
+// ============================================
+
+model burnoutAlert {
+  id        String   @id @default(cuid())
+  profileId String
+  profile   profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  alertType String
+  message   String
+  resolved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("burnout_alerts")
+}
+
+// ============================================
+// CLASSES
+// ============================================
+
+model eduClass {
+  id         String   @id @default(cuid())
+  teacherId  String
+  teacher    profile  @relation(fields: [teacherId], references: [id])
+  name       String
+  inviteCode String   @unique
+  createdAt  DateTime @default(now())
+
+  member classMember[]
+
+  @@map("classes")
+}
+
+model classMember {
+  id        String   @id @default(cuid())
+  classId   String
+  eduClass  eduClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+  profileId String
+  profile   profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, profileId])
+  @@map("class_members")
+}
+
+// ============================================
+// PEER CHAT
+// ============================================
+
+model chatMessage {
+  id         String   @id @default(cuid())
+  senderId   String
+  sender     profile  @relation("ChatSender", fields: [senderId], references: [id])
+  receiverId String
+  receiver   profile  @relation("ChatReceiver", fields: [receiverId], references: [id])
+  content    String
+  read       Boolean  @default(false)
+  sentAt     DateTime @default(now())
+
+  @@map("chat_messages")
+}
+
+// ============================================
+// PEER TUTORING
+// ============================================
+
+model tutoringRequest {
+  id          String   @id @default(cuid())
+  requesterId String
+  requester   profile  @relation("TutorRequester", fields: [requesterId], references: [id])
+  tutorId     String?
+  tutor       profile? @relation("TutorAccept", fields: [tutorId], references: [id])
+  topic       String
+  description String?
+  status      String   @default("OPEN")
+  createdAt   DateTime @default(now())
+  resolvedAt  DateTime?
+
+  @@map("tutoring_requests")
+}

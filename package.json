@@ -1,0 +1,16 @@
+{
+  "name": "innovation-challenge",
+  "private": true,
+  "scripts": {
+    "dev": "docker compose up",
+    "dev:web": "docker compose up web",
+    "dev:server": "docker compose up server",
+    "dev:db": "docker compose up postgres",
+    "db:generate": "pnpm --filter server db:generate",
+    "db:push": "pnpm --filter server db:push",
+    "db:migrate": "pnpm --filter server db:migrate",
+    "db:studio": "pnpm --filter server db:studio",
+    "build": "docker compose build"
+  },
+  "packageManager": "pnpm@9.15.0"
+}
