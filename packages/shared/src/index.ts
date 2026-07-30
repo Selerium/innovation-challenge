@@ -90,6 +90,12 @@ export const TopicSchema = z.object({
   name: z.string(),
   status: TopicStatusEnum,
   progress: z.number(),
+  explanation: z.string().nullable().optional(),
+  suggestions: z.array(z.object({
+    name: z.string(),
+    description: z.string(),
+    connection: z.string(),
+  })).nullable().optional(),
   createdAt: z.string(),
 });
 export type Topic = z.infer<typeof TopicSchema>;
@@ -106,10 +112,12 @@ export const CreateAssignmentSchema = z.object({
 });
 export type CreateAssignmentInput = z.infer<typeof CreateAssignmentSchema>;
 
-export const SubmitAssignmentSchema = z.object({
-  content: z.string().min(1, "Submission content is required"),
+export const QuestionSchema = z.object({
+  id: z.string(),
+  question: z.string(),
+  answer: z.string(),
 });
-export type SubmitAssignmentInput = z.infer<typeof SubmitAssignmentSchema>;
+export type Question = z.infer<typeof QuestionSchema>;
 
 export const SubmissionStatusEnum = z.enum(["SUBMITTED", "AI_GRADED", "TEACHER_REVIEWED"]);
 export type SubmissionStatus = z.infer<typeof SubmissionStatusEnum>;
@@ -129,6 +137,34 @@ export const AssignmentSubmissionSchema = z.object({
 });
 export type AssignmentSubmission = z.infer<typeof AssignmentSubmissionSchema>;
 
+export const AssignmentSchema = z.object({
+  id: z.string(),
+  subjectId: z.string(),
+  title: z.string(),
+  description: z.string().nullable(),
+  content: z.object({ questions: z.array(QuestionSchema) }),
+  createdAt: z.string(),
+  subject: z.object({ name: z.string(), grade: z.string() }).optional(),
+  submission: AssignmentSubmissionSchema.nullable().optional(),
+});
+export type Assignment = z.infer<typeof AssignmentSchema>;
+
+export const GenerateAssignmentSchema = z.object({
+  subjectId: z.string(),
+  topicId: z.string(),
+});
+export type GenerateAssignmentInput = z.infer<typeof GenerateAssignmentSchema>;
+
+export const SubmitAssignmentAnswersSchema = z.object({
+  answers: z.record(z.string(), z.string()),
+});
+export type SubmitAssignmentAnswersInput = z.infer<typeof SubmitAssignmentAnswersSchema>;
+
+export const SubmitAssignmentSchema = z.object({
+  content: z.string().min(1, "Submission content is required"),
+});
+export type SubmitAssignmentInput = z.infer<typeof SubmitAssignmentSchema>;
+
 // ============================================
 // AI CHAT
 // ============================================
@@ -137,12 +173,14 @@ export const AiChatMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
   content: z.string(),
   timestamp: z.string().datetime(),
+  topicId: z.string().optional(),
 });
 export type AiChatMessage = z.infer<typeof AiChatMessageSchema>;
 
 export const SendAiMessageSchema = z.object({
   subjectId: z.string(),
   message: z.string().min(1, "Message is required"),
+  topicId: z.string().optional(),
 });
 export type SendAiMessageInput = z.infer<typeof SendAiMessageSchema>;
 
@@ -168,6 +206,45 @@ export const SendMessageSchema = z.object({
   content: z.string().min(1, "Message cannot be empty"),
 });
 export type SendMessageInput = z.infer<typeof SendMessageSchema>;
+
+// ============================================
+// PEER TUTORING
+// ============================================
+
+export const TutoringTypeEnum = z.enum(["TEACH", "LEARN"]);
+export type TutoringType = z.infer<typeof TutoringTypeEnum>;
+
+export const TutoringStatusEnum = z.enum(["OPEN", "MATCHED", "CLOSED"]);
+export type TutoringStatus = z.infer<typeof TutoringStatusEnum>;
+
+export const CreateTutoringOfferSchema = z.object({
+  topic: z.string().min(1, "Subject is required"),
+  grade: z.string().min(1, "Grade is required"),
+});
+export type CreateTutoringOfferInput = z.infer<typeof CreateTutoringOfferSchema>;
+
+export const CreateTutoringRequestSchema = z.object({
+  topic: z.string().min(1, "Subject is required"),
+  grade: z.string().min(1, "Grade is required"),
+});
+export type CreateTutoringRequestInput = z.infer<typeof CreateTutoringRequestSchema>;
+
+export const TutoringRequestSchema = z.object({
+  id: z.string(),
+  requesterId: z.string(),
+  tutorId: z.string().nullable(),
+  type: TutoringTypeEnum,
+  topic: z.string(),
+  grade: z.string().nullable(),
+  description: z.string().nullable(),
+  status: TutoringStatusEnum,
+  createdAt: z.string(),
+  resolvedAt: z.string().nullable(),
+  pairedId: z.string().nullable(),
+  requester: z.object({ id: z.string(), displayName: z.string(), avatarUrl: z.string().nullable() }).optional(),
+  tutor: z.object({ id: z.string(), displayName: z.string(), avatarUrl: z.string().nullable() }).optional(),
+});
+export type TutoringRequest = z.infer<typeof TutoringRequestSchema>;
 
 // ============================================
 // API RESPONSES

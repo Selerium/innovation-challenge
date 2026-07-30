@@ -5,3 +5,5 @@ dist
 .env.local
 *.log
 .git
+data/
+node_modules/

@@ -1,8 +1,12 @@
 import Link from "next/link";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 export default function Home() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-8">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div className="text-center">
         <h1 className="text-5xl font-bold tracking-tight">
           <span className="text-primary">Edu</span>AI

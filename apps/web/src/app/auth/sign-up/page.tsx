@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
 
+import { ThemeToggle } from "@/components/ui/theme-toggle";
+
 export default function SignUp() {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -38,6 +40,9 @@ export default function SignUp() {
 
   return (
     <div className="flex min-h-screen items-center justify-center">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-sm rounded-xl border border-border bg-secondary p-8">
         <h1 className="text-2xl font-bold text-center mb-6">Create Account</h1>
 

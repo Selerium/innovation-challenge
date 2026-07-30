@@ -8,7 +8,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - ./data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -27,7 +27,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
       PORT: 4000
     depends_on:
       postgres:
@@ -38,13 +38,11 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
     ports:
-      - "3001:3000"
+      - "3000:3000"
     volumes:
       - ./apps/web/src:/app/apps/web/src
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:4000
+      NEXT_PUBLIC_WS_URL: ws://localhost:4000
     depends_on:
       - server
-
-volumes:
-  pgdata:

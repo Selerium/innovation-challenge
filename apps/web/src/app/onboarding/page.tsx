@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 
+import { ThemeToggle } from "@/components/ui/theme-toggle";
+
 export default function Onboarding() {
   const router = useRouter();
   const [displayName, setDisplayName] = useState("");
@@ -34,6 +36,9 @@ export default function Onboarding() {
 
   return (
     <div className="flex min-h-screen items-center justify-center">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-md rounded-xl border border-border bg-secondary p-8">
         <h1 className="text-2xl font-bold text-center mb-2">Welcome!</h1>
         <p className="text-center text-sm text-muted-foreground mb-6">

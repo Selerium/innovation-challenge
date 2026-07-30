@@ -1,11 +1,20 @@
 import express from "express";
 import cors from "cors";
+import { createServer } from "http";
 import { toNodeHandler } from "better-auth/node";
 import { auth } from "./lib/auth.ts";
 import { prisma } from "./lib/prisma.ts";
+import { wsManager } from "./lib/ws.ts";
 import profileRoutes from "./routes/profile.ts";
+import aiRoutes from "./routes/ai.ts";
+import subjectRoutes from "./routes/subjects.ts";
+import topicRoutes from "./routes/topics.ts";
+import assignmentRoutes from "./routes/assignments.ts";
+import tutoringRoutes from "./routes/tutoring.ts";
+import chatRoutes from "./routes/chat.ts";
 
 const app = express();
+const server = createServer(app);
 const PORT = process.env.PORT || 4000;
 
 // CORS must come first so preflight OPTIONS requests get headers
@@ -70,7 +79,29 @@ app.get("/api/session", async (req, res) => {
 });
 
 // Routes
+app.get("/api/auth/ws-token", async (req, res) => {
+  const { fromNodeHeaders } = await import("better-auth/node");
+  const session = await auth.api.getSession({
+    headers: fromNodeHeaders(req.headers),
+  });
+  if (!session?.user) {
+    return res.status(401).json({ success: false, error: "Unauthorized" });
+  }
+  const profile = await prisma.profile.findUnique({ where: { userId: session.user.id } });
+  if (!profile) {
+    return res.status(401).json({ success: false, error: "No profile" });
+  }
+  const token = wsManager.createToken(profile.id);
+  return res.json({ success: true, data: { token } });
+});
+
 app.use("/api/profile", profileRoutes);
+app.use("/api/ai", aiRoutes);
+app.use("/api/subjects", subjectRoutes);
+app.use("/api", topicRoutes);
+app.use("/api/assignments", assignmentRoutes);
+app.use("/api/tutoring", tutoringRoutes);
+app.use("/api/chat", chatRoutes);
 
 // Error handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -78,6 +109,8 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   res.status(500).json({ success: false, error: "Internal server error" });
 });
 
-app.listen(PORT, () => {
+wsManager.init(server);
+
+server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });

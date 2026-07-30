@@ -86,7 +86,7 @@ model profile {
   tutoringRequestSent   tutoringRequest[] @relation("TutorRequester")
   tutoringRequestTutor  tutoringRequest[] @relation("TutorAccept")
   aiConversation        aiConversation[]
-  topicSuggestion       topicSuggestion[]
+
   burnoutAlert          burnoutAlert[]
   classMember           classMember[]
   classTeaching         eduClass[]
@@ -117,18 +117,18 @@ model subject {
 }
 
 model topic {
-  id        String     @id @default(cuid())
-  subjectId String
-  subject   subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  name      String
-  status    String     @default("NOT_STARTED")
-  progress  Int        @default(0)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id          String     @id @default(cuid())
+  subjectId   String
+  subject     subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  name        String
+  status      String     @default("NOT_STARTED")
+  progress    Int        @default(0)
+  explanation String?
+  suggestions Json?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
-  studySession              studySession[]
-  topicSuggestionSource     topicSuggestion[] @relation("SourceTopic")
-  topicSuggestionSuggested  topicSuggestion[] @relation("SuggestedTopic")
+  studySession  studySession[]
 
   @@map("topics")
 }
@@ -206,26 +206,6 @@ model aiConversation {
 }
 
 // ============================================
-// TOPIC SUGGESTIONS
-// ============================================
-
-model topicSuggestion {
-  id               String   @id @default(cuid())
-  profileId        String
-  profile          profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  sourceTopicId    String
-  sourceTopic      topic    @relation("SourceTopic", fields: [sourceTopicId], references: [id])
-  suggestedTopicId String?
-  suggestedTopic   topic?   @relation("SuggestedTopic", fields: [suggestedTopicId], references: [id])
-  name             String
-  description      String?
-  accepted         Boolean?
-  createdAt        DateTime @default(now())
-
-  @@map("topic_suggestions")
-}
-
-// ============================================
 // BURNOUT DETECTION
 // ============================================
 
@@ -296,11 +276,17 @@ model tutoringRequest {
   requester   profile  @relation("TutorRequester", fields: [requesterId], references: [id])
   tutorId     String?
   tutor       profile? @relation("TutorAccept", fields: [tutorId], references: [id])
+  type        String   @default("LEARN")
   topic       String
+  grade       String?
   description String?
   status      String   @default("OPEN")
   createdAt   DateTime @default(now())
   resolvedAt  DateTime?
+
+  pairedId String?
+  pairedTo   tutoringRequest? @relation("PairedTutoring", fields: [pairedId], references: [id])
+  pairedFrom tutoringRequest[] @relation("PairedTutoring")
 
   @@map("tutoring_requests")
 }
