@@ -6,71 +6,107 @@ import type { AuthenticatedRequest } from "../middleware/auth.ts";
 
 const router = express.Router();
 
+function getOtherId(profileIds: unknown, profileId: string): string | null {
+  if (!Array.isArray(profileIds)) return null;
+  const ids = profileIds as string[];
+  return ids.find((p) => p !== profileId) ?? null;
+}
+
+async function findConversation(conversationId: string, profileId: string) {
+  const conversation = await prisma.conversation.findUnique({ where: { id: conversationId } });
+  if (!conversation) return null;
+  const profileIds = Array.isArray(conversation.profileIds) ? (conversation.profileIds as string[]) : [];
+  if (!profileIds.includes(profileId)) return null;
+  return conversation;
+}
+
+// GET /api/chat/conversations — list the user's conversations
 router.get("/conversations", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const profileId = req.profileId!;
 
-    const sent = await prisma.chatMessage.findMany({
-      where: { senderId: profileId },
-      include: { receiver: { select: { id: true, displayName: true, avatarUrl: true } } },
-      orderBy: { sentAt: "desc" },
+    const conversations = await prisma.conversation.findMany({
+      where: { profileIds: { array_contains: profileId } },
+      orderBy: { updatedAt: "desc" },
     });
 
-    const received = await prisma.chatMessage.findMany({
-      where: { receiverId: profileId },
-      include: { sender: { select: { id: true, displayName: true, avatarUrl: true } } },
-      orderBy: { sentAt: "desc" },
+    if (conversations.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const conversationIds = conversations.map((c) => c.id);
+
+    const messages = await prisma.chatMessage.findMany({
+      where: { conversationId: { in: conversationIds } },
+      orderBy: { sentAt: "asc" },
     });
 
-    const peerMap = new Map<string, { id: string; displayName: string; avatarUrl: string | null; lastMessage: string; lastMessageAt: Date; unreadCount: number }>();
-
-    for (const msg of sent) {
-      const pid = msg.receiverId;
-      if (!peerMap.has(pid)) {
-        peerMap.set(pid, { ...msg.receiver, lastMessage: msg.content, lastMessageAt: msg.sentAt, unreadCount: 0 });
+    const messagesByConv = new Map<string, typeof messages>();
+    for (const msg of messages) {
+      if (!messagesByConv.has(msg.conversationId)) {
+        messagesByConv.set(msg.conversationId, []);
       }
+      messagesByConv.get(msg.conversationId)!.push(msg);
     }
 
-    for (const msg of received) {
-      const pid = msg.senderId;
-      if (!peerMap.has(pid)) {
-        peerMap.set(pid, { ...msg.sender, lastMessage: msg.content, lastMessageAt: msg.sentAt, unreadCount: msg.read ? 0 : 1 });
-      } else {
-        const entry = peerMap.get(pid)!;
-        if (!msg.read) entry.unreadCount += 1;
-        if (msg.sentAt > entry.lastMessageAt) {
-          entry.lastMessage = msg.content;
-          entry.lastMessageAt = msg.sentAt;
-        }
-      }
-    }
+    const otherIds = conversations
+      .map((c) => getOtherId(c.profileIds, profileId))
+      .filter((id): id is string => !!id);
 
-    const peers = Array.from(peerMap.values()).sort((a, b) => b.lastMessageAt.getTime() - a.lastMessageAt.getTime());
+    const profiles = await prisma.profile.findMany({
+      where: { id: { in: Array.from(new Set(otherIds)) } },
+      select: { id: true, displayName: true, avatarUrl: true },
+    });
+    const profileMap = new Map(profiles.map((p) => [p.id, p]));
 
-    return res.json({ success: true, data: peers });
+    const data = conversations.map((conversation) => {
+      const otherId = getOtherId(conversation.profileIds, profileId);
+      const peer = otherId ? profileMap.get(otherId) : null;
+      const convMessages = messagesByConv.get(conversation.id) ?? [];
+
+      const last = convMessages[convMessages.length - 1];
+      const unreadCount = convMessages.filter((m) => m.senderId !== profileId && !m.read).length;
+
+      return {
+        conversationId: conversation.id,
+        status: conversation.status,
+        peer: peer
+          ? { id: peer.id, displayName: peer.displayName, avatarUrl: peer.avatarUrl }
+          : null,
+        lastMessage: last?.content ?? null,
+        lastMessageAt: last?.sentAt ?? conversation.createdAt,
+        unreadCount,
+      };
+    });
+
+    return res.json({ success: true, data });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });
   }
 });
 
-router.get("/:partnerId", requireAuth, async (req: AuthenticatedRequest, res) => {
+// GET /api/chat/:conversationId/messages — get messages in a conversation
+router.get("/:conversationId/messages", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const profileId = req.profileId!;
-    const partnerId = req.params.partnerId as string;
+    const conversationId = req.params.conversationId as string;
 
-    const messages = await prisma.chatMessage.findMany({
-      where: {
-        OR: [
-          { senderId: profileId, receiverId: partnerId },
-          { senderId: partnerId, receiverId: profileId },
-        ],
-      },
-      orderBy: { sentAt: "asc" },
-    });
+    const conversation = await findConversation(conversationId, profileId);
+    if (!conversation) {
+      return res.status(404).json({ success: false, error: "Conversation not found" });
+    }
+
+    const profileIds = conversation.profileIds as string[];
+    const otherId = getOtherId(profileIds, profileId);
 
     await prisma.chatMessage.updateMany({
-      where: { senderId: partnerId, receiverId: profileId, read: false },
+      where: { conversationId, senderId: otherId ?? "", read: false },
       data: { read: true },
+    });
+
+    const messages = await prisma.chatMessage.findMany({
+      where: { conversationId },
+      orderBy: { sentAt: "asc" },
     });
 
     return res.json({ success: true, data: messages });
@@ -79,33 +115,51 @@ router.get("/:partnerId", requireAuth, async (req: AuthenticatedRequest, res) =>
   }
 });
 
-router.post("/:partnerId/send", requireAuth, async (req: AuthenticatedRequest, res) => {
+// POST /api/chat/:conversationId/send — send a message
+router.post("/:conversationId/send", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const profileId = req.profileId!;
-    const partnerId = req.params.partnerId as string;
+    const conversationId = req.params.conversationId as string;
     const { content } = req.body;
 
     if (!content || typeof content !== "string" || !content.trim()) {
       return res.status(400).json({ success: false, error: "Content is required" });
     }
 
+    const conversation = await findConversation(conversationId, profileId);
+    if (!conversation) {
+      return res.status(404).json({ success: false, error: "Conversation not found" });
+    }
+
+    if (conversation.status !== "ACTIVE") {
+      return res.status(400).json({ success: false, error: "Conversation is closed" });
+    }
+
     const message = await prisma.chatMessage.create({
       data: {
+        conversationId,
         senderId: profileId,
-        receiverId: partnerId,
         content: content.trim(),
       },
     });
 
-    wsManager.sendToProfile(partnerId, {
-      type: "new_message",
-      payload: {
-        id: message.id,
-        senderId: profileId,
-        content: message.content,
-        sentAt: message.sentAt.toISOString(),
-      },
-    });
+    await prisma.conversation.update({ where: { id: conversationId }, data: {} });
+
+    const profileIds = conversation.profileIds as string[];
+    const otherId = getOtherId(profileIds, profileId);
+
+    if (otherId) {
+      wsManager.sendToProfile(otherId, {
+        type: "new_message",
+        payload: {
+          id: message.id,
+          conversationId,
+          senderId: profileId,
+          content: message.content,
+          sentAt: message.sentAt.toISOString(),
+        },
+      });
+    }
 
     return res.status(201).json({ success: true, data: message });
   } catch (error: any) {
@@ -113,6 +167,7 @@ router.post("/:partnerId/send", requireAuth, async (req: AuthenticatedRequest, r
   }
 });
 
+// DELETE /api/chat/messages/:messageId — delete a message you sent
 router.delete("/messages/:messageId", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const messageId = req.params.messageId as string;

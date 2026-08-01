@@ -15,4 +15,4 @@ COPY apps/server/src ./apps/server/src/
 
 WORKDIR /app/apps/server
 
-CMD sh -c "npx prisma generate && npx prisma db push --skip-generate && node --watch --experimental-strip-types src/index.ts"
+CMD sh -c "npx prisma generate && npx prisma db push --skip-generate --accept-data-loss && node --watch --experimental-strip-types src/index.ts"

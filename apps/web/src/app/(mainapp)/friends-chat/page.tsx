@@ -4,83 +4,72 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { useWebSocket } from "@/lib/use-websocket";
+import { useProfile } from "@/lib/profile-context";
 
-type Peer = {
-  id: string;
-  displayName: string;
-  avatarUrl: string | null;
-  lastMessage: string;
+type Conversation = {
+  conversationId: string;
+  status: string;
+  peer: { id: string; displayName: string; avatarUrl: string | null } | null;
+  lastMessage: string | null;
   lastMessageAt: string;
   unreadCount: number;
 };
 
 type Message = {
   id: string;
+  conversationId: string;
   senderId: string;
-  receiverId: string;
   content: string;
   read: boolean;
   sentAt: string;
 };
 
-type Profile = {
-  id: string;
-  displayName: string;
-};
-
 export default function FriendsChatPage() {
   const searchParams = useSearchParams();
   const peerParam = searchParams.get("peer");
-  const [peers, setPeers] = useState<Peer[]>([]);
-  const [selectedPeer, setSelectedPeer] = useState<Peer | null>(null);
+  const { profile } = useProfile();
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selected, setSelected] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loadingPeers, setLoadingPeers] = useState(true);
+  const [loadingConvs, setLoadingConvs] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { on } = useWebSocket();
-  const selectedPeerRef = useRef(selectedPeer);
-  selectedPeerRef.current = selectedPeer;
-
-  // Load current profile
-  useEffect(() => {
-    api("/api/session").then((r: any) => {
-      if (r.success && r.data?.profile) setProfile(r.data.profile);
-    });
-  }, []);
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
 
   // Load conversations
-  const loadPeers = useCallback(async () => {
-    const r = await api<Peer[]>("/api/chat/conversations");
+  const loadConversations = useCallback(async () => {
+    const r = await api<{ data: Conversation[] }>("/api/chat/conversations");
     if (r.success && r.data) {
-      setPeers(r.data);
+      setConversations(r.data.data);
     }
-    setLoadingPeers(false);
+    setLoadingConvs(false);
   }, []);
 
-  useEffect(() => { loadPeers(); }, [loadPeers]);
+  useEffect(() => { loadConversations(); }, [loadConversations]);
 
-  // Auto-select peer from query param
+  // Auto-select conversation from query param
   useEffect(() => {
-    if (!peerParam || peers.length === 0) return;
-    const match = peers.find((p) => p.id === peerParam);
-    if (match) setSelectedPeer(match);
-  }, [peerParam, peers]);
+    if (!peerParam || conversations.length === 0) return;
+    const match = conversations.find((c) => c.peer?.id === peerParam);
+    if (match) setSelected(match);
+  }, [peerParam, conversations]);
 
-  // Load messages for selected peer
-  const loadMessages = useCallback(async (peerId: string) => {
-    const r = await api<Message[]>(`/api/chat/${peerId}`);
+  // Load messages for selected conversation
+  const loadMessages = useCallback(async (conversationId: string) => {
+    const r = await api<{ data: Message[] }>(`/api/chat/${conversationId}/messages`);
     if (r.success && r.data) {
-      setMessages(r.data);
+      setMessages(r.data.data);
     }
   }, []);
 
   useEffect(() => {
-    if (selectedPeer) {
-      loadMessages(selectedPeer.id);
+    if (selected) {
+      loadMessages(selected.conversationId);
     }
-  }, [selectedPeer, loadMessages]);
+  }, [selected, loadMessages]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -91,31 +80,30 @@ export default function FriendsChatPage() {
   useEffect(() => {
     const unsub = on("new_message", (payload) => {
       const msg = payload as any;
-      const currentPeer = selectedPeerRef.current;
+      const current = selectedRef.current;
 
-      // If currently viewing the sender's chat, append message
-      if (currentPeer && msg.senderId === currentPeer.id) {
+      if (current && msg.conversationId === current.conversationId) {
         setMessages((prev) => [...prev, msg as Message]);
       }
 
-      // Reload peers to update last message / unread count
-      loadPeers();
+      loadConversations();
     });
 
     return unsub;
-  }, [on, loadPeers]);
+  }, [on, loadConversations]);
 
   const handleSend = async () => {
-    if (!input.trim() || !selectedPeer || sending) return;
+    if (!input.trim() || !selected || sending) return;
     setSending(true);
-    const r = await api(`/api/chat/${selectedPeer.id}/send`, {
+    const r = await api<{ data: Message }>(`/api/chat/${selected.conversationId}/send`, {
       method: "POST",
       body: { content: input.trim() },
     });
-    if (r.success && r.data) {
-      setMessages((prev) => [...prev, r.data as Message]);
+    const message = r.data?.data;
+    if (r.success && message) {
+      setMessages((prev) => [...prev, message]);
       setInput("");
-      loadPeers();
+      loadConversations();
     }
     setSending(false);
   };
@@ -148,33 +136,44 @@ export default function FriendsChatPage() {
           <h2 className="text-lg font-semibold">Conversations</h2>
         </div>
         <div className="flex-1 overflow-y-auto">
-          {loadingPeers ? (
+          {loadingConvs ? (
             <div className="p-4 text-sm text-muted-foreground">Loading...</div>
-          ) : peers.length === 0 ? (
+          ) : conversations.length === 0 ? (
             <div className="p-4 text-sm text-muted-foreground">
               No conversations yet. Start a peer tutoring session to chat.
             </div>
           ) : (
-            peers.map((peer) => (
+            conversations.map((conv) => (
               <button
-                key={peer.id}
-                onClick={() => setSelectedPeer(peer)}
+                key={conv.conversationId}
+                onClick={() => setSelected(conv)}
                 className={`w-full text-left px-4 py-3 hover:bg-secondary/50 transition-colors border-b border-border/50 ${
-                  selectedPeer?.id === peer.id ? "bg-secondary" : ""
+                  selected?.conversationId === conv.conversationId ? "bg-secondary" : ""
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-sm truncate">{peer.displayName}</span>
-                  <div className="flex items-center gap-2">
-                    {peer.unreadCount > 0 && (
-                      <span className="bg-primary text-primary-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                        {peer.unreadCount}
+                  <span className="font-medium text-sm truncate">
+                    {conv.peer?.displayName ?? "Unknown"}
+                    {conv.status === "CLOSED" && (
+                      <span className="ml-2 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        Closed
                       </span>
                     )}
-                    <span className="text-xs text-muted-foreground">{formatDate(peer.lastMessageAt)}</span>
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {conv.unreadCount > 0 && (
+                      <span className="bg-primary text-primary-foreground text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                        {conv.unreadCount}
+                      </span>
+                    )}
+                    {conv.lastMessageAt && (
+                      <span className="text-xs text-muted-foreground">{formatDate(conv.lastMessageAt)}</span>
+                    )}
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground truncate mt-0.5">{peer.lastMessage}</p>
+                <p className="text-xs text-muted-foreground truncate mt-0.5">
+                  {conv.lastMessage ?? "Matched for peer learning - say hi!"}
+                </p>
               </button>
             ))
           )}
@@ -183,10 +182,10 @@ export default function FriendsChatPage() {
 
       {/* Chat area */}
       <div className="flex-1 flex flex-col">
-        {selectedPeer ? (
+        {selected ? (
           <>
             <div className="p-4 border-b border-border">
-              <h3 className="font-semibold">{selectedPeer.displayName}</h3>
+              <h3 className="font-semibold">{selected.peer?.displayName ?? "Unknown"}</h3>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {messages.length === 0 ? (
@@ -214,25 +213,33 @@ export default function FriendsChatPage() {
               )}
               <div ref={messagesEndRef} />
             </div>
-            <div className="p-4 border-t border-border">
-              <div className="flex gap-2">
-                <textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Type a message..."
-                  rows={1}
-                  className="flex-1 rounded-lg border border-border bg-background px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                <button
-                  onClick={handleSend}
-                  disabled={!input.trim() || sending}
-                  className="rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0"
-                >
-                  {sending ? "..." : "Send"}
-                </button>
+            {selected.status === "CLOSED" ? (
+              <div className="p-4 border-t border-border">
+                <p className="text-center text-sm text-muted-foreground">
+                  This conversation is closed.
+                </p>
               </div>
-            </div>
+            ) : (
+              <div className="p-4 border-t border-border">
+                <div className="flex gap-2">
+                  <textarea
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Type a message..."
+                    rows={1}
+                    className="flex-1 rounded-lg border border-border bg-background px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <button
+                    onClick={handleSend}
+                    disabled={!input.trim() || sending}
+                    className="rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors shrink-0"
+                  >
+                    {sending ? "..." : "Send"}
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">

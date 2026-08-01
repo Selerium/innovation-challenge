@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { useStudySession } from "@/lib/use-study-session";
 
 type Suggestion = {
   name: string;
@@ -54,6 +55,11 @@ export default function SubjectDetailPage() {
   const [suggesting, setSuggesting] = useState(false);
   const [generating, setGenerating] = useState(false);
 
+  const { markActive, running, activeMinutes, endSession } = useStudySession({
+    enabled: !!subject && !!selectedTopicId,
+    topicId: selectedTopicId,
+  });
+
   const loadSubject = useCallback(async () => {
     const result = await api<{ data: SubjectData }>(`/api/subjects/${id}`);
     if (result.success && result.data) {
@@ -89,6 +95,7 @@ export default function SubjectDetailPage() {
     e.preventDefault();
     if (!chatInput.trim() || !selectedTopicId || sending) return;
 
+    markActive();
     setSending(true);
     const userMsg = chatInput.trim();
     setChatInput("");
@@ -111,6 +118,7 @@ export default function SubjectDetailPage() {
 
   async function handleExplain() {
     if (!selectedTopicId || explaining) return;
+    markActive();
     setExplaining(true);
     const result = await api<{ data: { explanation: string } }>("/api/ai/deep-dive", {
       method: "POST",
@@ -132,6 +140,7 @@ export default function SubjectDetailPage() {
 
   async function handleSuggest() {
     if (!selectedTopicId || suggesting) return;
+    markActive();
     setSuggesting(true);
     const result = await api<{ data: { suggestions: Suggestion[] } }>("/api/ai/suggest-topics", {
       method: "POST",
@@ -153,6 +162,7 @@ export default function SubjectDetailPage() {
 
   async function handleGenerate() {
     if (!selectedTopicId || generating) return;
+    markActive();
     setGenerating(true);
     const result = await api<{ data: { id: string } }>("/api/assignments/generate", {
       method: "POST",
@@ -213,7 +223,10 @@ export default function SubjectDetailPage() {
                 {subject.topic.map((t) => (
                   <button
                     key={t.id}
-                    onClick={() => setSelectedTopicId(t.id)}
+                    onClick={() => {
+                      markActive();
+                      setSelectedTopicId(t.id);
+                    }}
                     className={`w-full text-left rounded-lg px-3 py-2.5 text-sm transition-colors ${
                       selectedTopicId === t.id
                         ? "bg-primary/10 text-primary font-medium"
@@ -236,10 +249,24 @@ export default function SubjectDetailPage() {
           <div className="flex-1 min-w-0 space-y-6">
             {/* Chat */}
             <div className="rounded-xl border border-border bg-secondary">
-              <div className="border-b border-border px-4 py-3">
+              <div className="border-b border-border px-4 py-3 flex items-center justify-between">
                 <h2 className="font-semibold">
                   {selectedTopic ? selectedTopic.name : "Chat"}
                 </h2>
+                {running && (
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                      <span className="size-1.5 rounded-full bg-primary animate-pulse" />
+                      Studying{activeMinutes > 0 ? ` · ${activeMinutes}m` : ""}
+                    </span>
+                    <button
+                      onClick={() => endSession()}
+                      className="rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-muted transition-colors"
+                    >
+                      End
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="h-80 overflow-y-auto space-y-3 p-4">
@@ -268,7 +295,10 @@ export default function SubjectDetailPage() {
                 <input
                   type="text"
                   value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
+                  onChange={(e) => {
+                    markActive();
+                    setChatInput(e.target.value);
+                  }}
                   placeholder={`Ask about ${selectedTopic?.name || "this subject"}...`}
                   disabled={sending}
                   className="flex-1 rounded-lg border border-border bg-background px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"

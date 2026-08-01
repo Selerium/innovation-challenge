@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { useProfile } from "@/lib/profile-context";
 
 type Question = {
   id: string;
@@ -25,6 +27,7 @@ type Assignment = {
 
 export default function AssignmentDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { refreshProfile } = useProfile();
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [loading, setLoading] = useState(true);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -74,6 +77,15 @@ export default function AssignmentDetailPage() {
     setSubmitting(false);
     if (result.success) {
       setSubmitted(true);
+      const xp = result.data?.data?.xp;
+      if (xp && xp.xpAwarded > 0) {
+        if (xp.leveledUp) {
+          toast.success(`Level Up! You reached Level ${xp.level} · +${xp.xpAwarded} XP`);
+        } else {
+          toast.success(`+${xp.xpAwarded} XP earned from submitting your assignment`);
+        }
+        refreshProfile();
+      }
     }
   }
 

@@ -1,5 +1,6 @@
 import { Josefin_Sans, Geist } from "next/font/google";
 import type { Metadata } from "next";
+import { Toaster } from "sonner";
 import "./globals.css";
 import { ThemeProvider } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -39,6 +40,7 @@ export default function RootLayout({
       <body className="min-h-screen antialiased">
         <ThemeProvider>
           {children}
+          <Toaster richColors position="top-right" />
         </ThemeProvider>
       </body>
     </html>

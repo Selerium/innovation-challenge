@@ -82,7 +82,6 @@ model profile {
   assignmentSubmission  assignmentSubmission[]
   createdAssignments    assignment[]
   chatMessageSent       chatMessage[]     @relation("ChatSender")
-  chatMessageReceived   chatMessage[]     @relation("ChatReceiver")
   tutoringRequestSent   tutoringRequest[] @relation("TutorRequester")
   tutoringRequestTutor  tutoringRequest[] @relation("TutorAccept")
   aiConversation        aiConversation[]
@@ -90,6 +89,7 @@ model profile {
   burnoutAlert          burnoutAlert[]
   classMember           classMember[]
   classTeaching         eduClass[]
+  xpTransaction         xpTransaction[]
 
   @@map("profiles")
 }
@@ -139,10 +139,11 @@ model studySession {
   profile         profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
   topicId         String
   topic           topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  durationMinutes Int
-  xpEarned        Int
+  durationMinutes Int      @default(0)
+  xpEarned        Int      @default(0)
   startedAt       DateTime
-  endedAt         DateTime
+  lastActiveAt    DateTime?
+  endedAt         DateTime?
   createdAt       DateTime @default(now())
 
   @@map("study_sessions")
@@ -184,6 +185,7 @@ model assignmentSubmission {
   submittedAt    DateTime @default(now())
   gradedAt       DateTime?
 
+  @@unique([assignmentId, profileId])
   @@map("assignment_submissions")
 }
 
@@ -215,10 +217,28 @@ model burnoutAlert {
   profile   profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
   alertType String
   message   String
+  score     Int      @default(0)
   resolved  Boolean  @default(false)
   createdAt DateTime @default(now())
 
   @@map("burnout_alerts")
+}
+
+// ============================================
+// GAMIFICATION
+// ============================================
+
+model xpTransaction {
+  id        String   @id @default(cuid())
+  profileId String
+  profile   profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  amount    Int
+  reason    String
+  refId     String?
+  createdAt DateTime @default(now())
+
+  @@unique([reason, refId])
+  @@map("xp_transactions")
 }
 
 // ============================================
@@ -244,6 +264,7 @@ model classMember {
   eduClass  eduClass @relation(fields: [classId], references: [id], onDelete: Cascade)
   profileId String
   profile   profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
 
   @@unique([classId, profileId])
   @@map("class_members")
@@ -253,15 +274,28 @@ model classMember {
 // PEER CHAT
 // ============================================
 
-model chatMessage {
+model conversation {
   id         String   @id @default(cuid())
-  senderId   String
-  sender     profile  @relation("ChatSender", fields: [senderId], references: [id])
-  receiverId String
-  receiver   profile  @relation("ChatReceiver", fields: [receiverId], references: [id])
-  content    String
-  read       Boolean  @default(false)
-  sentAt     DateTime @default(now())
+  profileIds Json
+  status     String   @default("ACTIVE")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  closedAt   DateTime?
+
+  messages chatMessage[]
+
+  @@map("conversations")
+}
+
+model chatMessage {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         profile      @relation("ChatSender", fields: [senderId], references: [id])
+  content        String
+  read           Boolean      @default(false)
+  sentAt         DateTime     @default(now())
 
   @@map("chat_messages")
 }

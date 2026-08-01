@@ -22,6 +22,15 @@ export async function api<T = any>(
     credentials: "include",
   });
 
-  const data = await res.json();
-  return {success: res.ok, data: data, error: res.statusText};
+  const data = await res.json().catch(() => null);
+  const bodyMsg =
+    data && typeof data === "object"
+      ? (data as { error?: unknown; message?: unknown }).error ??
+        (data as { message?: unknown }).message
+      : undefined;
+  return {
+    success: res.ok,
+    data,
+    error: res.ok ? undefined : typeof bodyMsg === "string" && bodyMsg ? bodyMsg : res.statusText,
+  };
 }

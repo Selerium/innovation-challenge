@@ -12,6 +12,13 @@ import topicRoutes from "./routes/topics.ts";
 import assignmentRoutes from "./routes/assignments.ts";
 import tutoringRoutes from "./routes/tutoring.ts";
 import chatRoutes from "./routes/chat.ts";
+import classRoutes from "./routes/classes.ts";
+import teacherRoutes from "./routes/teacher.ts";
+import burnoutRoutes from "./routes/burnout.ts";
+import studySessionRoutes from "./routes/study-sessions.ts";
+import gamificationRoutes from "./routes/gamification.ts";
+import { startDailyScan } from "./jobs/daily-scan.ts";
+import { startSessionSweeper } from "./jobs/session-sweeper.ts";
 
 const app = express();
 const server = createServer(app);
@@ -102,6 +109,11 @@ app.use("/api", topicRoutes);
 app.use("/api/assignments", assignmentRoutes);
 app.use("/api/tutoring", tutoringRoutes);
 app.use("/api/chat", chatRoutes);
+app.use("/api/classes", classRoutes);
+app.use("/api/teacher", teacherRoutes);
+app.use("/api/burnout", burnoutRoutes);
+app.use("/api/study-sessions", studySessionRoutes);
+app.use("/api/gamification", gamificationRoutes);
 
 // Error handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -110,6 +122,9 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 });
 
 wsManager.init(server);
+
+startDailyScan();
+startSessionSweeper();
 
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -25,16 +26,24 @@ export default function SignIn() {
       body: { email, password, callbackURL: "/dashboard" },
     });
 
-    if (!result.success && !result.data) {
+    if (!result.success) {
       setError(result.error || "Login failed");
+      toast.error(result.error || "Login failed");
       setLoading(false);
       return;
     }
+
+    toast.success("Welcome back!", { description: email });
 
     // Check onboarding status via our session endpoint
     const sessionResult = await api("/api/session");
 
     setLoading(false);
+
+    if (!sessionResult.success || !sessionResult.data?.data?.profile) {
+      router.push("/dashboard");
+      return;
+    }
 
     if (!sessionResult.data.data.profile.onboardingDone) {
       router.push("/onboarding");

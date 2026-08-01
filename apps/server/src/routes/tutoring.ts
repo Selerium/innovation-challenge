@@ -32,6 +32,9 @@ async function tryMatch(targetId: string) {
 
   if (!match) return;
 
+  const tutorId = entry.type === "TEACH" ? entry.requesterId : match.requesterId;
+  const learnerId = entry.type === "LEARN" ? entry.requesterId : match.requesterId;
+
   await prisma.$transaction([
     prisma.tutoringRequest.update({
       where: { id: entry.id },
@@ -41,10 +44,10 @@ async function tryMatch(targetId: string) {
       where: { id: match.id },
       data: { status: "MATCHED", tutorId: match.type === "TEACH" ? match.requesterId : entry.requesterId, pairedId: entry.id, resolvedAt: new Date() },
     }),
+    prisma.conversation.create({
+      data: { profileIds: [tutorId, learnerId], status: "ACTIVE" },
+    }),
   ]);
-
-  const tutorId = entry.type === "TEACH" ? entry.requesterId : match.requesterId;
-  const learnerId = entry.type === "LEARN" ? entry.requesterId : match.requesterId;
 
   const [tutorProfile, learnerProfile] = await Promise.all([
     prisma.profile.findUnique({ where: { id: tutorId }, select: { displayName: true } }),
@@ -191,8 +194,18 @@ router.post("/:id/close", requireAuth, async (req: AuthenticatedRequest, res) =>
       data: { status: "CLOSED", resolvedAt: new Date() },
     });
 
+    const otherId = entry.requesterId === profileId ? entry.tutorId : entry.requesterId;
+    if (otherId) {
+      await prisma.conversation.updateMany({
+        where: {
+          profileIds: { array_contains: [profileId, otherId] },
+          status: "ACTIVE",
+        },
+        data: { status: "CLOSED", closedAt: new Date() },
+      });
+    }
+
     if (entry.pairedId) {
-      const otherId = entry.requesterId === profileId ? entry.tutorId : entry.requesterId;
       wsManager.sendToProfile(otherId, {
         type: "peer_closed",
         payload: { topic: entry.topic, grade: entry.grade, sessionId: entry.id },

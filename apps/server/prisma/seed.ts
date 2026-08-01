@@ -1,0 +1,976 @@
+/**
+ * Demo seed for EduAI.
+ *
+ * Creates a teacher, classes, students, subjects/topics, AI conversations,
+ * peer chats, tutoring requests, assignments + submissions, study sessions
+ * and XP history so every screen of the app has realistic demo data.
+ *
+ * All demo accounts use the password:  demo12345
+ *
+ * Run with:  npx prisma db seed  (from apps/server)
+ * NOTE: This wipes all existing data before seeding.
+ */
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { PrismaClient, Prisma } from "@prisma/client";
+import { levelFromXp } from "@repo/shared";
+import { auth } from "../src/lib/auth.ts";
+
+const __dir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dir, "..", "..");
+try {
+  process.loadEnvFile(path.join(repoRoot, ".env"));
+} catch {}
+
+const prisma = new PrismaClient();
+
+const DEMO_PASSWORD = "demo12345";
+const XP_STUDY_MINUTE = 2;
+const XP_TOPIC_MASTERED = 50;
+const XP_ASSIGNMENT_SUBMITTED = 20;
+
+const now = Date.now();
+const daysAgo = (d: number, h = 0) => new Date(now - d * 86400000 - h * 3600000);
+
+// ---------------------------------------------------------------------------
+// Demo data
+// ---------------------------------------------------------------------------
+
+const TEACHER = {
+  email: "teacher@demo.com",
+  name: "Ms. Rivera",
+  displayName: "Ms. Rivera",
+  bio: "Middle school math & science teacher with 10 years of experience. Excited to try AI-assisted learning this term!",
+};
+
+type TopicSeed = {
+  name: string;
+  status: "NOT_STARTED" | "IN_PROGRESS" | "MASTERED";
+  progress: number;
+  explanation?: string;
+  suggestions?: { name: string; description: string; connection: string }[];
+};
+
+type SubjectSeed = {
+  name: string;
+  grade: string;
+  scope?: string;
+  topics: TopicSeed[];
+};
+
+type QuestionSeed = { question: string; answer: string };
+
+type AssignmentSeed = {
+  subject: string;
+  title: string;
+  questions: QuestionSeed[];
+  submitted?: boolean;
+  aiScore?: number;
+  aiFeedback?: string;
+  teacherScore?: number;
+  teacherComment?: string;
+  gradedDaysAgo?: number;
+};
+
+type SessionSeed = { subject: string; topic: string; minutes: number; daysAgo: number };
+
+type StudentSeed = {
+  email: string;
+  displayName: string;
+  bio: string;
+  subjects: SubjectSeed[];
+  assignments: AssignmentSeed[];
+  sessions: SessionSeed[];
+};
+
+const STUDENTS: StudentSeed[] = [
+  {
+    email: "aiden@demo.com",
+    displayName: "Aiden Patel",
+    bio: "Loves math puzzles and coding.",
+    subjects: [
+      {
+        name: "Mathematics",
+        grade: "Grade 7",
+        scope: "Standard 7th grade curriculum",
+        topics: [
+          {
+            name: "Algebra Basics",
+            status: "MASTERED",
+            progress: 100,
+            explanation:
+              "Algebra uses letters (variables) to represent unknown numbers. An expression like 2x + 3 combines a variable with constants. Solving an equation means isolating the variable using inverse operations. For example, in 2x + 3 = 11, subtract 3 from both sides to get 2x = 8, then divide by 2 to find x = 4.",
+            suggestions: [
+              { name: "Linear Equations", description: "Solve equations with variables on both sides.", connection: "Builds on isolating variables from Algebra Basics." },
+              { name: "Graphing Lines", description: "Plot linear equations on a coordinate plane.", connection: "Visualizes the relationships introduced in Algebra Basics." },
+              { name: "Word Problems", description: "Translate real-world situations into equations.", connection: "Applies algebraic solving to practical scenarios." },
+            ],
+          },
+          { name: "Fractions & Decimals", status: "MASTERED", progress: 100, explanation: "A fraction represents a part of a whole, like 3/4. To convert a fraction to a decimal, divide numerator by denominator (3 ÷ 4 = 0.75). To add fractions, first find a common denominator." },
+          { name: "Percentages", status: "IN_PROGRESS", progress: 60, explanation: "A percentage means 'out of 100'. To find 25% of 80, multiply 80 × 0.25 = 20. To convert a fraction to a percent, divide then multiply by 100." },
+          { name: "Geometry Basics", status: "IN_PROGRESS", progress: 40 },
+        ],
+      },
+      {
+        name: "English",
+        grade: "Grade 7",
+        scope: "Literature & composition",
+        topics: [
+          { name: "Literary Devices", status: "MASTERED", progress: 100, explanation: "Literary devices like simile, metaphor, and personification make writing vivid. A simile compares using 'like' or 'as'; a metaphor states one thing is another; personification gives human traits to non-human things." },
+          { name: "Essay Writing", status: "IN_PROGRESS", progress: 55 },
+          { name: "Reading Comprehension", status: "NOT_STARTED", progress: 0 },
+        ],
+      },
+    ],
+    assignments: [
+      {
+        subject: "Algebra Basics",
+        title: "Algebra Basics - Practice Questions",
+        questions: [
+          { question: "Solve for x: 2x + 3 = 11", answer: "x = 4" },
+          { question: "Solve for x: x - 5 = 12", answer: "x = 17" },
+          { question: "What is the value of 3x when x = 7?", answer: "21" },
+          { question: "Simplify: 4x + 2x - 3", answer: "6x - 3" },
+          { question: "If y = 2x + 1, what is y when x = 5?", answer: "11" },
+        ],
+        submitted: true,
+        aiScore: 92,
+        aiFeedback: "Strong understanding of inverse operations. Keep practicing two-step equations.",
+        teacherScore: 90,
+        teacherComment: "Excellent work, Aiden! Show your steps on the word problem next time.",
+        gradedDaysAgo: 6,
+      },
+      {
+        subject: "Fractions & Decimals",
+        title: "Fractions & Decimals - Practice Questions",
+        questions: [
+          { question: "Convert 3/4 to a decimal.", answer: "0.75" },
+          { question: "Add 1/4 + 2/4.", answer: "3/4" },
+          { question: "Simplify 8/12.", answer: "2/3" },
+          { question: "Which is larger: 1/3 or 0.4?", answer: "0.4" },
+          { question: "Multiply 2/3 × 3/4.", answer: "1/2" },
+        ],
+        submitted: true,
+        aiScore: 85,
+        aiFeedback: "Great job on conversions. Review multiplying fractions.",
+        gradedDaysAgo: 3,
+      },
+      {
+        subject: "Percentages",
+        title: "Percentages - Practice Questions",
+        questions: [
+          { question: "What is 25% of 80?", answer: "20" },
+          { question: "Convert 0.6 to a percent.", answer: "60%" },
+          { question: "A shirt costs $40 and is 20% off. What is the discount?", answer: "$8" },
+          { question: "What percent of 50 is 10?", answer: "20%" },
+          { question: "Convert 45% to a decimal.", answer: "0.45" },
+        ],
+      },
+    ],
+    sessions: [
+      { subject: "Algebra Basics", topic: "Algebra Basics", minutes: 25, daysAgo: 9 },
+      { subject: "Algebra Basics", topic: "Algebra Basics", minutes: 30, daysAgo: 8 },
+      { subject: "Mathematics", topic: "Fractions & Decimals", minutes: 20, daysAgo: 5 },
+      { subject: "English", topic: "Literary Devices", minutes: 15, daysAgo: 4 },
+      { subject: "Mathematics", topic: "Percentages", minutes: 25, daysAgo: 2 },
+      { subject: "Mathematics", topic: "Percentages", minutes: 20, daysAgo: 1 },
+    ],
+  },
+  {
+    email: "zoe@demo.com",
+    displayName: "Zoe Chen",
+    bio: "Aiming for the top of the leaderboard!",
+    subjects: [
+      {
+        name: "Mathematics",
+        grade: "Grade 7",
+        scope: "Standard 7th grade curriculum",
+        topics: [
+          { name: "Fractions & Decimals", status: "MASTERED", progress: 100, explanation: "A fraction represents a part of a whole. Convert to decimals by dividing the numerator by the denominator." },
+          { name: "Percentages", status: "IN_PROGRESS", progress: 70 },
+          { name: "Algebra Basics", status: "IN_PROGRESS", progress: 45 },
+        ],
+      },
+    ],
+    assignments: [
+      {
+        subject: "Fractions & Decimals",
+        title: "Fractions & Decimals - Practice Questions",
+        questions: [
+          { question: "Convert 1/2 to a decimal.", answer: "0.5" },
+          { question: "Add 1/3 + 1/3.", answer: "2/3" },
+          { question: "Simplify 10/15.", answer: "2/3" },
+          { question: "Convert 0.25 to a fraction.", answer: "1/4" },
+          { question: "Subtract 3/4 - 1/4.", answer: "1/2" },
+        ],
+        submitted: true,
+        aiScore: 88,
+        aiFeedback: "Solid. Work on simplifying fractions to lowest terms consistently.",
+        gradedDaysAgo: 4,
+      },
+      {
+        subject: "Percentages",
+        title: "Percentages - Practice Questions",
+        questions: [
+          { question: "What is 50% of 60?", answer: "30" },
+          { question: "Convert 0.3 to a percent.", answer: "30%" },
+          { question: "What percent of 80 is 20?", answer: "25%" },
+          { question: "A jacket costs $50 with 10% tax. What is the tax?", answer: "$5" },
+          { question: "Convert 5% to a decimal.", answer: "0.05" },
+        ],
+      },
+    ],
+    sessions: [
+      { subject: "Mathematics", topic: "Fractions & Decimals", minutes: 30, daysAgo: 7 },
+      { subject: "Mathematics", topic: "Percentages", minutes: 20, daysAgo: 3 },
+      { subject: "Mathematics", topic: "Algebra Basics", minutes: 15, daysAgo: 1 },
+    ],
+  },
+  {
+    email: "liam@demo.com",
+    displayName: "Liam Nguyen",
+    bio: "New this term - figuring out a study routine.",
+    subjects: [
+      {
+        name: "Mathematics",
+        grade: "Grade 7",
+        topics: [
+          { name: "Percentages", status: "IN_PROGRESS", progress: 35 },
+          { name: "Fractions & Decimals", status: "NOT_STARTED", progress: 0 },
+        ],
+      },
+    ],
+    assignments: [
+      {
+        subject: "Percentages",
+        title: "Percentages - Practice Questions",
+        questions: [
+          { question: "What is 10% of 90?", answer: "9" },
+          { question: "Convert 0.5 to a percent.", answer: "50%" },
+          { question: "Convert 1/4 to a percent.", answer: "25%" },
+          { question: "What is 5% of 200?", answer: "10" },
+          { question: "Convert 70% to a decimal.", answer: "0.7" },
+        ],
+      },
+    ],
+    sessions: [
+      { subject: "Mathematics", topic: "Percentages", minutes: 15, daysAgo: 6 },
+      { subject: "Mathematics", topic: "Percentages", minutes: 10, daysAgo: 4 },
+    ],
+  },
+  {
+    email: "sofia@demo.com",
+    displayName: "Sofia Ramirez",
+    bio: "Geometry enthusiast. Loves visual learning.",
+    subjects: [
+      {
+        name: "Mathematics",
+        grade: "Grade 7",
+        topics: [
+          { name: "Geometry Basics", status: "IN_PROGRESS", progress: 65, explanation: "Geometry studies shapes and space. Key ideas include angles (acute, obtuse, right), perimeter (sum of sides), and area (length × width for rectangles)." },
+          { name: "Ratios & Proportions", status: "IN_PROGRESS", progress: 30 },
+        ],
+      },
+      {
+        name: "English",
+        grade: "Grade 7",
+        topics: [
+          { name: "Reading Comprehension", status: "IN_PROGRESS", progress: 40 },
+        ],
+      },
+    ],
+    assignments: [
+      {
+        subject: "Geometry Basics",
+        title: "Geometry Basics - Practice Questions",
+        questions: [
+          { question: "How many sides does a hexagon have?", answer: "6" },
+          { question: "What is the area of a 4cm × 5cm rectangle?", answer: "20 cm²" },
+          { question: "What is the perimeter of a square with side 6?", answer: "24" },
+          { question: "How many degrees are in a right angle?", answer: "90" },
+          { question: "What is the sum of angles in a triangle?", answer: "180 degrees" },
+        ],
+        submitted: true,
+        aiScore: 90,
+        aiFeedback: "Great spatial reasoning! Try applying area formulas to irregular shapes.",
+        gradedDaysAgo: 2,
+      },
+      {
+        subject: "Ratios & Proportions",
+        title: "Ratios & Proportions - Practice Questions",
+        questions: [
+          { question: "Simplify the ratio 4:8.", answer: "1:2" },
+          { question: "If 3 apples cost $6, how much do 6 cost?", answer: "$12" },
+          { question: "What is 2:5 equivalent to?", answer: "4:10" },
+          { question: "In a class of 20 with 12 girls, what is the ratio of girls to boys?", answer: "12:8 (3:2)" },
+          { question: "A map uses 1cm = 2km. How far is 5cm?", answer: "10 km" },
+        ],
+      },
+    ],
+    sessions: [
+      { subject: "Mathematics", topic: "Geometry Basics", minutes: 20, daysAgo: 5 },
+      { subject: "English", topic: "Reading Comprehension", minutes: 15, daysAgo: 2 },
+    ],
+  },
+  {
+    email: "olivia@demo.com",
+    displayName: "Olivia Davis",
+    bio: "Just getting started - any tips welcome!",
+    subjects: [
+      {
+        name: "Mathematics",
+        grade: "Grade 7",
+        topics: [
+          { name: "Algebra Basics", status: "IN_PROGRESS", progress: 25 },
+          { name: "Fractions & Decimals", status: "NOT_STARTED", progress: 0 },
+        ],
+      },
+    ],
+    assignments: [
+      {
+        subject: "Algebra Basics",
+        title: "Algebra Basics - Practice Questions",
+        questions: [
+          { question: "Solve for x: x + 4 = 9", answer: "x = 5" },
+          { question: "Solve for x: 3x = 15", answer: "x = 5" },
+          { question: "What is the value of 2x when x = 4?", answer: "8" },
+          { question: "Solve for x: x/2 = 6", answer: "x = 12" },
+          { question: "Solve for x: x - 3 = 10", answer: "x = 13" },
+        ],
+      },
+    ],
+    sessions: [
+      { subject: "Mathematics", topic: "Algebra Basics", minutes: 12, daysAgo: 3 },
+    ],
+  },
+  {
+    email: "maya@demo.com",
+    displayName: "Maya Johnson",
+    bio: "Science fair champion two years running.",
+    subjects: [
+      {
+        name: "Science",
+        grade: "Grade 8",
+        scope: "Integrated science",
+        topics: [
+          { name: "Photosynthesis", status: "MASTERED", progress: 100, explanation: "Photosynthesis is how plants convert light energy into chemical energy. Carbon dioxide and water combine with sunlight to produce glucose and oxygen. It happens in the chloroplasts using the pigment chlorophyll." },
+          { name: "Chemical Reactions", status: "MASTERED", progress: 100 },
+          { name: "Newton's Laws", status: "IN_PROGRESS", progress: 75, explanation: "Newton's first law: objects stay at rest or in motion unless a force acts. Second law: F = ma. Third law: every action has an equal and opposite reaction." },
+          { name: "Ecosystems", status: "IN_PROGRESS", progress: 50 },
+        ],
+      },
+    ],
+    assignments: [
+      {
+        subject: "Photosynthesis",
+        title: "Photosynthesis - Practice Questions",
+        questions: [
+          { question: "What are the inputs of photosynthesis?", answer: "Carbon dioxide and water (with sunlight)" },
+          { question: "What gas does photosynthesis release?", answer: "Oxygen" },
+          { question: "Where does photosynthesis occur in a plant?", answer: "In the chloroplasts of leaf cells" },
+          { question: "What energy does the plant convert light into?", answer: "Chemical energy stored in glucose" },
+          { question: "Name the pigment that absorbs light energy.", answer: "Chlorophyll" },
+        ],
+        submitted: true,
+        aiScore: 94,
+        aiFeedback: "Excellent! You clearly understand the inputs, outputs, and location of photosynthesis.",
+        teacherScore: 95,
+        teacherComment: "Beautiful explanation of chlorophyll's role, Maya!",
+        gradedDaysAgo: 7,
+      },
+      {
+        subject: "Chemical Reactions",
+        title: "Chemical Reactions - Practice Questions",
+        questions: [
+          { question: "What is a chemical reaction?", answer: "A process where atoms rearrange to form new substances" },
+          { question: "What does a balanced equation conserve?", answer: "Atoms (mass)" },
+          { question: "Balance: H₂ + O₂ → H₂O", answer: "2H₂ + O₂ → 2H₂O" },
+          { question: "Name the products of burning methane.", answer: "Carbon dioxide and water" },
+          { question: "What is a catalyst?", answer: "A substance that speeds up a reaction without being used up" },
+        ],
+        submitted: true,
+        aiScore: 90,
+        aiFeedback: "Great understanding of balancing equations. Keep going!",
+        gradedDaysAgo: 4,
+      },
+      {
+        subject: "Newton's Laws",
+        title: "Newton's Laws - Practice Questions",
+        questions: [
+          { question: "State Newton's first law.", answer: "An object stays at rest or in uniform motion unless acted on by a force" },
+          { question: "What does F = ma describe?", answer: "The relationship between force, mass, and acceleration" },
+          { question: "If mass doubles with the same force, what happens to acceleration?", answer: "It halves" },
+          { question: "Give an example of Newton's third law.", answer: "Rockets push gas down, gas pushes the rocket up" },
+          { question: "What is inertia?", answer: "The resistance of an object to changes in motion" },
+        ],
+      },
+    ],
+    sessions: [
+      { subject: "Science", topic: "Photosynthesis", minutes: 30, daysAgo: 10 },
+      { subject: "Science", topic: "Chemical Reactions", minutes: 25, daysAgo: 6 },
+      { subject: "Science", topic: "Newton's Laws", minutes: 20, daysAgo: 2 },
+    ],
+  },
+  {
+    email: "noah@demo.com",
+    displayName: "Noah Kim",
+    bio: "Soccer player. Trying to balance practice and schoolwork.",
+    subjects: [
+      {
+        name: "Science",
+        grade: "Grade 8",
+        topics: [
+          { name: "The Periodic Table", status: "IN_PROGRESS", progress: 20 },
+          { name: "Chemical Reactions", status: "NOT_STARTED", progress: 0 },
+        ],
+      },
+    ],
+    assignments: [
+      {
+        subject: "The Periodic Table",
+        title: "The Periodic Table - Practice Questions",
+        questions: [
+          { question: "What is the atomic symbol for gold?", answer: "Au" },
+          { question: "What number on the periodic table equals protons?", answer: "The atomic number" },
+          { question: "Which element has symbol H?", answer: "Hydrogen" },
+          { question: "What group are the noble gases in?", answer: "Group 18" },
+          { question: "What is the atomic number of carbon?", answer: "6" },
+        ],
+        submitted: true,
+        aiScore: 62,
+        aiFeedback: "You know the basics. Review the layout of groups and periods.",
+        teacherComment: "Noah - check in with me after class for some extra practice.",
+        teacherScore: 60,
+        gradedDaysAgo: 5,
+      },
+    ],
+    sessions: [
+      { subject: "Science", topic: "The Periodic Table", minutes: 10, daysAgo: 8 },
+    ],
+  },
+  {
+    email: "ethan@demo.com",
+    displayName: "Ethan Brown",
+    bio: "Basketball and science fan.",
+    subjects: [
+      {
+        name: "Science",
+        grade: "Grade 8",
+        topics: [
+          { name: "Ecosystems", status: "IN_PROGRESS", progress: 30 },
+          { name: "Newton's Laws", status: "NOT_STARTED", progress: 0 },
+        ],
+      },
+    ],
+    assignments: [
+      {
+        subject: "Ecosystems",
+        title: "Ecosystems - Practice Questions",
+        questions: [
+          { question: "What is an ecosystem?", answer: "A community of living things interacting with their environment" },
+          { question: "What does a food chain begin with?", answer: "A producer (usually a plant)" },
+          { question: "What role do decomposers play?", answer: "They break down dead matter and recycle nutrients" },
+          { question: "What is a predator?", answer: "An animal that hunts other animals for food" },
+          { question: "Give one example of a producer.", answer: "Grass, trees, or algae" },
+        ],
+        submitted: true,
+        aiScore: 70,
+        aiFeedback: "Good grasp of food chains. Keep reviewing energy flow in ecosystems.",
+        gradedDaysAgo: 3,
+      },
+    ],
+    sessions: [
+      { subject: "Science", topic: "Ecosystems", minutes: 12, daysAgo: 7 },
+    ],
+  },
+];
+
+const CLASSES = [
+  { name: "Grade 7 Mathematics", inviteCode: "MATH7A", members: ["aiden", "zoe", "liam", "sofia", "olivia"] },
+  { name: "Grade 8 Science", inviteCode: "SCI8B", members: ["maya", "noah", "ethan"] },
+  { name: "Grade 7 Homeroom", inviteCode: "HOME7C", members: ["aiden", "zoe", "sofia", "maya", "noah"] },
+];
+
+type AIConversationSeed = {
+  profile: string;
+  subject: string;
+  topic: string;
+  exchanges: [string, string][];
+  daysAgo: number;
+};
+
+const AI_CONVERSATIONS: AIConversationSeed[] = [
+  {
+    profile: "aiden",
+    subject: "Algebra Basics",
+    topic: "Algebra Basics",
+    daysAgo: 1,
+    exchanges: [
+      ["Can you explain what a variable is?", "Sure! A variable is a letter, like x or y, that stands for an unknown number. In 2x + 3 = 11, the x is the number we're trying to find."],
+      ["How do I solve 2x + 3 = 11?", "Great question. Subtract 3 from both sides to get 2x = 8. Then divide both sides by 2, so x = 4. Try checking: 2(4) + 3 = 11 ✓"],
+      ["What if there are variables on both sides?", "Then collect the variable terms on one side. For example, in 3x + 2 = x + 8, subtract x from both sides first, then solve."],
+    ],
+  },
+  {
+    profile: "aiden",
+    subject: "Literary Devices",
+    topic: "Literary Devices",
+    daysAgo: 3,
+    exchanges: [
+      ["What's the difference between a simile and a metaphor?", "A simile compares two things using 'like' or 'as' (e.g., 'brave as a lion'). A metaphor says one thing IS another directly (e.g., 'time is a thief')."],
+      ["Give me an example of personification.", "Personification gives human qualities to non-human things: 'The wind whispered through the trees.' The wind can't literally whisper!"],
+    ],
+  },
+  {
+    profile: "zoe",
+    subject: "Percentages",
+    topic: "Percentages",
+    daysAgo: 1,
+    exchanges: [
+      ["How do I find 20% of 150?", "Multiply 150 by 0.20, which equals 30. Tip: 10% is just a tenth, so 20% is double that — 15 × 2 = 30. Same answer!"],
+      ["How do I convert 0.3 to a percent?", "Multiply by 100: 0.3 × 100 = 30%. And 45% as a decimal is 0.45."],
+    ],
+  },
+  {
+    profile: "liam",
+    subject: "Percentages",
+    topic: "Percentages",
+    daysAgo: 4,
+    exchanges: [
+      ["What is a percentage exactly?", "A percentage is a fraction out of 100. '25%' literally means 25 out of every 100."],
+      ["So what is 25% of 80?", "Think of 80 as 100 parts. 25% means 25/100, so multiply 80 × 25/100 = 80 × 0.25 = 20."],
+    ],
+  },
+  {
+    profile: "sofia",
+    subject: "Geometry Basics",
+    topic: "Geometry Basics",
+    daysAgo: 2,
+    exchanges: [
+      ["What's the difference between perimeter and area?", "Perimeter is the distance around a shape (add all the sides). Area is the space inside it (length × width for a rectangle)."],
+      ["How many degrees are in a triangle?", "The interior angles of any triangle always add up to 180 degrees."],
+    ],
+  },
+  {
+    profile: "maya",
+    subject: "Photosynthesis",
+    topic: "Photosynthesis",
+    daysAgo: 5,
+    exchanges: [
+      ["Why do plants need sunlight?", "Plants need light energy to power photosynthesis — turning carbon dioxide and water into glucose (their food) and oxygen."],
+      ["Where does photosynthesis happen?", "In the chloroplasts, which are mostly found in the leaf cells. They contain chlorophyll, the green pigment that captures light."],
+    ],
+  },
+  {
+    profile: "maya",
+    subject: "Newton's Laws",
+    topic: "Newton's Laws",
+    daysAgo: 1,
+    exchanges: [
+      ["Can you explain Newton's second law simply?", "It says force = mass × acceleration. Push a light object and a heavy object with the same force — the light one accelerates more."],
+      ["Why do rockets work?", "Newton's third law! The rocket pushes hot gas downward, and the gas pushes the rocket upward with equal force."],
+    ],
+  },
+  {
+    profile: "noah",
+    subject: "The Periodic Table",
+    topic: "The Periodic Table",
+    daysAgo: 2,
+    exchanges: [
+      ["What is the atomic number?", "The number of protons in an atom's nucleus. It's what makes each element unique — carbon is 6, oxygen is 8."],
+      ["How do I find the symbol for gold?", "The symbol is Au, from the Latin 'aurum'. Many symbols come from Latin names."],
+    ],
+  },
+  {
+    profile: "ethan",
+    subject: "Ecosystems",
+    topic: "Ecosystems",
+    daysAgo: 3,
+    exchanges: [
+      ["What's a food chain?", "It shows who eats whom in an ecosystem, starting with producers (plants), then consumers. Energy flows from the sun → plant → herbivore → carnivore."],
+      ["What do decomposers do?", "They break down dead plants and animals, returning nutrients to the soil. Mushrooms and earthworms are decomposers."],
+    ],
+  },
+];
+
+type PeerConvoSeed = {
+  between: [string, string];
+  messages: [sender: 0 | 1, content: string, daysAgo: number, hour: number][];
+};
+
+const PEER_CONVERSATIONS: PeerConvoSeed[] = [
+  {
+    between: ["aiden", "zoe"],
+    messages: [
+      [0, "Hey Zoe! Did you finish the algebra homework?", 2, 16],
+      [1, "Almost! Stuck on 2x + 3 = 11.", 2, 16],
+      [0, "Subtract 3 from both sides first, then divide by 2. Got it?", 2, 17],
+      [1, "Oh nice, x = 4. Thanks! Want to study for the quiz together?", 1, 10],
+    ],
+  },
+  {
+    between: ["maya", "noah"],
+    messages: [
+      [0, "Noah, want me to help you with the periodic table?", 3, 15],
+      [1, "That would be great, I keep mixing up groups and periods.", 3, 16],
+      [0, "Easy trick: periods are rows, groups are columns. Gold is Au 😄", 3, 16],
+    ],
+  },
+  {
+    between: ["sofia", "olivia"],
+    messages: [
+      [1, "Sofia, how do you remember geometry formulas?", 1, 9],
+      [0, "I draw them! Area = base × height for rectangles, I just picture a grid.", 1, 9],
+      [1, "That's smart. Can we practice together later?", 1, 10],
+    ],
+  },
+];
+
+type TutoringSeed = {
+  requester: string;
+  type: "LEARN" | "TEACH";
+  topic: string;
+  grade: string;
+  description: string;
+  status: "OPEN" | "MATCHED";
+  tutor?: string;
+  paired?: string;
+  daysAgo: number;
+};
+
+const TUTORING: TutoringSeed[] = [
+  { requester: "aiden", type: "LEARN", topic: "Ratios and proportions", grade: "Grade 7", description: "Want to get better at ratio word problems before the test.", status: "OPEN", daysAgo: 2 },
+  { requester: "olivia", type: "LEARN", topic: "Algebra basics", grade: "Grade 7", description: "New to algebra, could use a patient tutor.", status: "OPEN", daysAgo: 1 },
+  { requester: "maya", type: "TEACH", topic: "Photosynthesis", grade: "Grade 8", description: "I can help explain photosynthesis and plant biology.", status: "MATCHED", tutor: "maya", paired: "noah", daysAgo: 4 },
+  { requester: "noah", type: "LEARN", topic: "Photosynthesis", grade: "Grade 8", description: "Struggling with photosynthesis, need help.", status: "MATCHED", tutor: "maya", paired: "maya", daysAgo: 4 },
+];
+
+type BurnoutSeed = {
+  profile: string;
+  score: number;
+  message: string;
+  resolved: boolean;
+  daysAgo: number;
+};
+
+const BURNOUT_ALERTS: BurnoutSeed[] = [
+  { profile: "noah", score: 76, message: "Studying irregular hours with low topic progress; signs of disengagement from learning.", resolved: false, daysAgo: 3 },
+  { profile: "ethan", score: 61, message: "Long gaps between study sessions and few completed topics suggest early burnout signals.", resolved: false, daysAgo: 1 },
+  { profile: "liam", score: 42, message: "Slightly low engagement this week. A lighter, more consistent routine would help.", resolved: true, daysAgo: 10 },
+];
+
+// ---------------------------------------------------------------------------
+// Seed logic
+// ---------------------------------------------------------------------------
+
+async function createUser(email: string, name: string, role: "STUDENT" | "TEACHER", displayName: string, bio: string) {
+  const res = (await auth.api.signUpEmail({
+    body: { email, password: DEMO_PASSWORD, name },
+  })) as any;
+  const userId = res.user.id;
+
+  await prisma.user.update({ where: { id: userId }, data: { role, emailVerified: true } });
+
+  const profile = await prisma.profile.findUniqueOrThrow({ where: { userId } });
+  await prisma.profile.update({
+    where: { id: profile.id },
+    data: { displayName, bio, onboardingDone: true },
+  });
+  return profile;
+}
+
+function buildMessages(seed: AIConversationSeed) {
+  const msgs: any[] = [];
+  seed.exchanges.forEach(([user, assistant], i) => {
+    const t = daysAgo(seed.daysAgo, i * 1.5);
+    msgs.push({ role: "user", content: user, timestamp: t.toISOString(), topicId: seed.topic });
+    msgs.push({ role: "assistant", content: assistant, timestamp: new Date(t.getTime() + 60000).toISOString(), topicId: seed.topic });
+  });
+  return msgs;
+}
+
+async function main() {
+  console.log("🌱 Seeding EduAI demo data...\n");
+
+  // ---- Wipe existing data (FK-safe order) ----
+  await prisma.tutoringRequest.deleteMany();
+  await prisma.chatMessage.deleteMany();
+  await prisma.conversation.deleteMany();
+  await prisma.eduClass.deleteMany();
+  await prisma.assignment.deleteMany();
+  await prisma.user.deleteMany();
+
+  // ---- Teacher ----
+  const teacher = await createUser(TEACHER.email, TEACHER.name, "TEACHER", TEACHER.displayName, TEACHER.bio);
+  console.log(`✔ Teacher: ${TEACHER.displayName} (${TEACHER.email})`);
+
+  // ---- Students ----
+  const profiles: Record<string, any> = {};
+  for (const s of STUDENTS) {
+    profiles[s.displayName.split(" ")[0].toLowerCase()] = await createUser(s.email, s.displayName, "STUDENT", s.displayName, s.bio);
+  }
+  console.log(`✔ Students: ${STUDENTS.length} created`);
+
+  // Key by student key
+  const byKey = (seed: StudentSeed) => profiles[seed.displayName.split(" ")[0].toLowerCase()];
+
+  // ---- Classes + members ----
+  const classMap: Record<string, any> = {};
+  for (const c of CLASSES) {
+    const cls = await prisma.eduClass.create({
+      data: {
+        teacherId: teacher.id,
+        name: c.name,
+        inviteCode: c.inviteCode,
+        member: { create: c.members.map((m) => ({ profileId: profiles[m].id })) },
+      },
+    });
+    classMap[c.name] = cls;
+  }
+  console.log(`✔ Classes: ${CLASSES.map((c) => `${c.name} (${c.inviteCode})`).join(", ")}`);
+
+  // ---- Subjects + topics ----
+  const topicIdBy: Record<string, string> = {};
+  const subjectIdBy: Record<string, string> = {};
+  const topicByName: Record<string, string> = {};
+  const subjectByTopic: Record<string, string> = {};
+  for (const s of STUDENTS) {
+    const profile = byKey(s);
+    for (const sub of s.subjects) {
+      const subject = await prisma.subject.create({
+        data: {
+          profileId: profile.id,
+          name: sub.name,
+          grade: sub.grade,
+          scope: sub.scope ?? null,
+          topic: {
+            create: sub.topics.map((t) => ({
+              name: t.name,
+              status: t.status,
+              progress: t.progress,
+              explanation: t.explanation ?? null,
+              suggestions: (t.suggestions as Prisma.InputJsonValue) ?? undefined,
+            })),
+          },
+        },
+        include: { topic: true },
+      });
+      subjectIdBy[`${profile.id}:${sub.name}`] = subject.id;
+      for (const t of subject.topic) {
+        topicIdBy[`${profile.id}:${sub.name}:${t.name}`] = t.id;
+        topicByName[`${profile.id}:${t.name}`] = t.id;
+        subjectByTopic[`${profile.id}:${t.name}`] = subject.id;
+      }
+    }
+  }
+  console.log(`✔ Subjects & topics created for all students`);
+
+  // ---- Assignments + submissions ----
+  const assignmentIdBy: Record<string, string> = {};
+  let submissions = 0;
+  for (const s of STUDENTS) {
+    const profile = byKey(s);
+    for (const a of s.assignments) {
+      const subjectKey = `${profile.id}:${s.subjects.find((sub) => sub.topics.some((t) => t.name === a.subject))?.name}`;
+      const assignment = await prisma.assignment.create({
+        data: {
+          subjectId: subjectIdBy[subjectKey],
+          creatorId: profile.id,
+          title: a.title,
+          description: `AI-generated questions based on ${a.subject}`,
+          content: { questions: a.questions } as Prisma.InputJsonValue,
+          dueDate: daysAgo(-7),
+        },
+      });
+      assignmentIdBy[`${profile.id}:${a.title}`] = assignment.id;
+
+      if (a.submitted) {
+        await prisma.assignmentSubmission.create({
+          data: {
+            assignmentId: assignment.id,
+            profileId: profile.id,
+            content: JSON.stringify(Object.fromEntries(a.questions.map((q, i) => [`q${i + 1}`, q.answer]))),
+            status: "GRADED",
+            aiScore: a.aiScore ?? null,
+            aiFeedback: a.aiFeedback ?? null,
+            teacherScore: a.teacherScore ?? null,
+            teacherComment: a.teacherComment ?? null,
+            submittedAt: daysAgo(a.gradedDaysAgo ?? 5),
+            gradedAt: daysAgo((a.gradedDaysAgo ?? 5) - 1),
+          },
+        });
+        submissions++;
+      }
+    }
+  }
+  console.log(`✔ Assignments: created for every student (${submissions} submitted & graded)`);
+
+  // ---- Study sessions ----
+  const sessionsByProfile: Record<string, any[]> = {};
+  for (const s of STUDENTS) {
+    const profile = byKey(s);
+    for (const sess of s.sessions) {
+      const topicId = topicByName[`${profile.id}:${sess.topic}`];
+      if (!topicId) continue;
+      const startedAt = daysAgo(sess.daysAgo, 14);
+      const xpEarned = sess.minutes * XP_STUDY_MINUTE;
+      const session = await prisma.studySession.create({
+        data: {
+          profileId: profile.id,
+          topicId,
+          durationMinutes: sess.minutes,
+          xpEarned,
+          startedAt,
+          lastActiveAt: new Date(startedAt.getTime() + sess.minutes * 60000),
+          endedAt: new Date(startedAt.getTime() + sess.minutes * 60000),
+        },
+      });
+      (sessionsByProfile[profile.id] ??= []).push(session);
+    }
+  }
+  console.log(`✔ Study sessions: created for all students`);
+
+  // ---- XP transactions + profile totals ----
+  for (const s of STUDENTS) {
+    const profile = byKey(s);
+    let total = 0;
+
+    for (const sub of s.subjects) {
+      for (const t of sub.topics) {
+        if (t.status === "MASTERED") {
+          await prisma.xpTransaction.create({
+            data: { profileId: profile.id, amount: XP_TOPIC_MASTERED, reason: "TOPIC_MASTERED", refId: topicIdBy[`${profile.id}:${sub.name}:${t.name}`] },
+          });
+          total += XP_TOPIC_MASTERED;
+        }
+      }
+    }
+
+    for (const a of s.assignments) {
+      if (a.submitted) {
+        await prisma.xpTransaction.create({
+          data: { profileId: profile.id, amount: XP_ASSIGNMENT_SUBMITTED, reason: "ASSIGNMENT_SUBMITTED", refId: assignmentIdBy[`${profile.id}:${a.title}`] },
+        });
+        total += XP_ASSIGNMENT_SUBMITTED;
+      }
+    }
+
+    for (const session of sessionsByProfile[profile.id] ?? []) {
+      await prisma.xpTransaction.create({
+        data: { profileId: profile.id, amount: session.xpEarned, reason: "STUDY_SESSION", refId: session.id },
+      });
+      total += session.xpEarned;
+    }
+
+    await prisma.profile.update({
+      where: { id: profile.id },
+      data: { xp: total, level: levelFromXp(total) },
+    });
+  }
+  console.log(`✔ XP history: transactions + levels computed for all students`);
+
+  // ---- AI conversations ----
+  for (const c of AI_CONVERSATIONS) {
+    const profile = profiles[c.profile];
+    const subjectId = subjectByTopic[`${profile.id}:${c.topic}`];
+    if (!subjectId) continue;
+    const newMessages = buildMessages(c) as Prisma.InputJsonValue;
+    const existing = await prisma.aiConversation.findUnique({
+      where: { profileId_subjectId: { profileId: profile.id, subjectId } },
+    });
+    await prisma.aiConversation.upsert({
+      where: { profileId_subjectId: { profileId: profile.id, subjectId } },
+      update: { messages: [...((existing?.messages as any[]) ?? []), ...(newMessages as any[])] },
+      create: { profileId: profile.id, subjectId, messages: newMessages },
+    });
+  }
+  console.log(`✔ AI conversations: ${AI_CONVERSATIONS.length} subject chats seeded`);
+
+  // ---- Peer conversations ----
+  for (const c of PEER_CONVERSATIONS) {
+    const [aKey, bKey] = c.between;
+    const a = profiles[aKey];
+    const b = profiles[bKey];
+    const conversation = await prisma.conversation.create({
+      data: { profileIds: [a.id, b.id], status: "ACTIVE" },
+    });
+    for (const [sender, content, d, hour] of c.messages) {
+      await prisma.chatMessage.create({
+        data: {
+          conversationId: conversation.id,
+          senderId: sender === 0 ? a.id : b.id,
+          content,
+          sentAt: daysAgo(d, hour),
+        },
+      });
+    }
+  }
+  console.log(`✔ Peer chats: ${PEER_CONVERSATIONS.length} conversations seeded`);
+
+  // ---- Tutoring requests (incl. one matched pair) ----
+  const reqByKey: Record<string, any> = {};
+  for (const t of TUTORING) {
+    const request = await prisma.tutoringRequest.create({
+      data: {
+        requesterId: profiles[t.requester].id,
+        type: t.type,
+        topic: t.topic,
+        grade: t.grade,
+        description: t.description,
+        status: t.status,
+      },
+    });
+    reqByKey[t.requester] = request;
+  }
+
+  // Pair the MATCHED tutoring requests and open a conversation between them
+  const matched = TUTORING.filter((t) => t.status === "MATCHED");
+  for (const t of matched) {
+    const me = reqByKey[t.requester];
+    const other = reqByKey[t.paired!];
+    await prisma.tutoringRequest.update({
+      where: { id: me.id },
+      data: { tutorId: t.tutor ? profiles[t.tutor].id : null, pairedId: other.id, resolvedAt: daysAgo(t.daysAgo - 1) },
+    });
+    await prisma.conversation.create({
+      data: { profileIds: [profiles[t.requester].id, profiles[t.paired!].id], status: "ACTIVE" },
+    });
+  }
+  console.log(`✔ Tutoring: ${TUTORING.filter((t) => t.status === "OPEN").length} open + 1 matched pair`);
+
+  // ---- Burnout alerts ----
+  for (const b of BURNOUT_ALERTS) {
+    await prisma.burnoutAlert.create({
+      data: {
+        profileId: profiles[b.profile].id,
+        alertType: "BURNOUT",
+        score: b.score,
+        message: b.message,
+        resolved: b.resolved,
+        createdAt: daysAgo(b.daysAgo),
+      },
+    });
+  }
+  console.log(`✔ Burnout alerts: ${BURNOUT_ALERTS.filter((b) => !b.resolved).length} active + 1 resolved`);
+
+  // ---- Summary ----
+  console.log("\n✅ Seed complete!");
+  console.log("\nDemo accounts (password: demo12345):");
+  console.log(`  Teacher  → ${TEACHER.email}  (${TEACHER.displayName})`);
+  for (const s of STUDENTS) {
+    console.log(`  Student  → ${s.email}  (${s.displayName})`);
+  }
+  console.log("\nClass invite codes:");
+  for (const c of CLASSES) {
+    console.log(`  ${c.name}: ${c.inviteCode}`);
+  }
+}
+
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

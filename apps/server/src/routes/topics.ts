@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.ts";
 import { requireAuth } from "../middleware/auth.ts";
 import type { AuthenticatedRequest } from "../middleware/auth.ts";
 import { CreateTopicSchema, UpdateTopicSchema } from "@repo/shared";
+import { addXp, XP } from "../lib/gamification.ts";
 
 const router = express.Router();
 
@@ -74,12 +75,22 @@ router.put("/topics/:id", requireAuth, async (req: AuthenticatedRequest, res) =>
       return res.status(404).json({ success: false, error: "Topic not found" });
     }
 
+    const wasMastered = topic.status === "MASTERED";
+
     const updated = await prisma.topic.update({
       where: { id: topic.id },
       data: parsed.data,
     });
 
-    return res.json({ success: true, data: updated });
+    let xp: any = null;
+    if (!wasMastered && updated.status === "MASTERED") {
+      const result = await addXp(req.profileId!, XP.TOPIC_MASTERED, "TOPIC_MASTERED", updated.id);
+      if (result) {
+        xp = { xpAwarded: result.xpAwarded, totalXp: result.totalXp, level: result.level, leveledUp: result.leveledUp };
+      }
+    }
+
+    return res.json({ success: true, data: { ...updated, xp } });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });
   }

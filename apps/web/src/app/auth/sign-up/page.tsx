@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -26,13 +27,15 @@ export default function SignUp() {
       body: { name, email, password },
     });
 
-    console.log(result);
     setLoading(false);
 
     if (!result.success) {
       setError(result.error || "Registration failed");
+      toast.error(result.error || "Registration failed");
       return;
     }
+
+    toast.success("Account created!", { description: email });
 
     // Profile is auto-created by databaseHooks
     router.push("/onboarding");

@@ -6,6 +6,7 @@ export type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   timestamp?: string;
+  topicId?: string | null;
 };
 
 type GeminiContent = {

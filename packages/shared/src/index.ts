@@ -198,6 +198,27 @@ export const JoinClassSchema = z.object({
 });
 export type JoinClassInput = z.infer<typeof JoinClassSchema>;
 
+export const ClassMemberSchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+  avatarUrl: z.string().nullable(),
+  role: z.string(),
+  joinedAt: z.string(),
+});
+export type ClassMember = z.infer<typeof ClassMemberSchema>;
+
+export const ClassInfoSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  inviteCode: z.string(),
+  teacherId: z.string(),
+  teacherName: z.string(),
+  memberCount: z.number(),
+  userRole: z.enum(["TEACHER", "MEMBER"]),
+  createdAt: z.string(),
+});
+export type ClassInfo = z.infer<typeof ClassInfoSchema>;
+
 // ============================================
 // CHAT (student-to-student)
 // ============================================
@@ -247,6 +268,157 @@ export const TutoringRequestSchema = z.object({
 export type TutoringRequest = z.infer<typeof TutoringRequestSchema>;
 
 // ============================================
+// TEACHER ANALYTICS
+// ============================================
+
+export const ClassAnalyticsSchema = z.object({
+  class: z.object({ id: z.string(), name: z.string(), inviteCode: z.string(), memberCount: z.number() }),
+  assignments: z.number(),
+  submissions: z.number(),
+  avgAiScore: z.number().nullable(),
+  avgTeacherScore: z.number().nullable(),
+  atRiskCount: z.number(),
+});
+export type ClassAnalytics = z.infer<typeof ClassAnalyticsSchema>;
+
+export const SubmissionReviewSchema = z.object({
+  id: z.string(),
+  assignmentTitle: z.string(),
+  studentName: z.string(),
+  content: z.string(),
+  aiScore: z.number().nullable(),
+  aiFeedback: z.string().nullable(),
+  teacherScore: z.number().nullable(),
+  teacherComment: z.string().nullable(),
+  status: SubmissionStatusEnum,
+  submittedAt: z.string(),
+});
+export type SubmissionReview = z.infer<typeof SubmissionReviewSchema>;
+
+export const StudentSummarySchema = z.object({
+  profileId: z.string(),
+  displayName: z.string(),
+  avatarUrl: z.string().nullable(),
+  level: z.number(),
+  xp: z.number(),
+  subjects: z.number(),
+  topicsMastered: z.number(),
+  avgAssignmentScore: z.number().nullable(),
+  burnoutScore: z.number().nullable(),
+  atRisk: z.boolean(),
+});
+export type StudentSummary = z.infer<typeof StudentSummarySchema>;
+
+export const StudentDetailSchema = z.object({
+  profile: z.object({ id: z.string(), displayName: z.string(), avatarUrl: z.string().nullable(), level: z.number(), xp: z.number(), bio: z.string().nullable() }),
+  subjects: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    grade: z.string(),
+    topicsTotal: z.number(),
+    topicsMastered: z.number(),
+    averageProgress: z.number(),
+  })),
+  assignments: z.array(z.object({
+    id: z.string(),
+    title: z.string(),
+    subjectName: z.string(),
+    aiScore: z.number().nullable(),
+    teacherScore: z.number().nullable(),
+    status: SubmissionStatusEnum,
+    submittedAt: z.string(),
+  })),
+  burnoutAlerts: z.array(z.object({ id: z.string(), score: z.number(), message: z.string(), resolved: z.boolean(), createdAt: z.string() })),
+});
+export type StudentDetail = z.infer<typeof StudentDetailSchema>;
+
+// ============================================
+// BURNOUT
+// ============================================
+
+export const BurnoutAlertSchema = z.object({
+  id: z.string(),
+  profileId: z.string(),
+  alertType: z.string(),
+  message: z.string(),
+  score: z.number(),
+  resolved: z.boolean(),
+  createdAt: z.string(),
+});
+export type BurnoutAlert = z.infer<typeof BurnoutAlertSchema>;
+
+export const BurnoutScanResultSchema = z.object({
+  scanned: z.number(),
+  alertsCreated: z.number(),
+});
+export type BurnoutScanResult = z.infer<typeof BurnoutScanResultSchema>;
+
+export const ResolveBurnoutSchema = z.object({
+  resolved: z.boolean().optional(),
+});
+export type ResolveBurnoutInput = z.infer<typeof ResolveBurnoutSchema>;
+
+// ============================================
+// GAMIFICATION
+// ============================================
+
+export const StudySessionHeartbeatSchema = z.object({
+  topicId: z.string().min(1, "Topic is required"),
+});
+export type StudySessionHeartbeatInput = z.infer<typeof StudySessionHeartbeatSchema>;
+
+export const StudySessionSchema = z.object({
+  id: z.string(),
+  profileId: z.string(),
+  topicId: z.string(),
+  topicName: z.string(),
+  subjectName: z.string(),
+  durationMinutes: z.number(),
+  xpEarned: z.number(),
+  startedAt: z.string(),
+  endedAt: z.string().nullable(),
+  active: z.boolean(),
+});
+export type StudySession = z.infer<typeof StudySessionSchema>;
+
+export const XpResultSchema = z.object({
+  xpAwarded: z.number(),
+  totalXp: z.number(),
+  level: z.number(),
+  leveledUp: z.boolean(),
+  sessionId: z.string().optional(),
+  durationMinutes: z.number().optional(),
+});
+export type XpResult = z.infer<typeof XpResultSchema>;
+
+export const XpTransactionSchema = z.object({
+  id: z.string(),
+  amount: z.number(),
+  reason: z.string(),
+  refId: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type XpTransaction = z.infer<typeof XpTransactionSchema>;
+
+export const LeaderboardEntrySchema = z.object({
+  profileId: z.string(),
+  displayName: z.string(),
+  avatarUrl: z.string().nullable(),
+  level: z.number(),
+  xp: z.number(),
+  topicsMastered: z.number(),
+  rank: z.number(),
+  isYou: z.boolean(),
+});
+export type LeaderboardEntry = z.infer<typeof LeaderboardEntrySchema>;
+
+export const LeaderboardResponseSchema = z.object({
+  entries: z.array(LeaderboardEntrySchema),
+  yourRank: z.number().nullable(),
+});
+export type LeaderboardResponse = z.infer<typeof LeaderboardResponseSchema>;
+
+// ============================================
 // API RESPONSES
 // ============================================
 
@@ -262,3 +434,38 @@ export type ApiResponse<T> = {
   data?: T;
   error?: string;
 };
+
+// ============================================
+// XP / LEVEL HELPERS
+// ============================================
+
+export type LevelProgress = {
+  level: number;
+  xpIntoLevel: number;
+  xpForCurrentLevel: number;
+  nextLevelAt: number;
+  progress: number; // 0-100
+};
+
+export function levelFromXp(xp: number): number {
+  return Math.floor(Math.sqrt(xp / 100)) + 1;
+}
+
+export function xpThreshold(level: number): number {
+  return 100 * level * level;
+}
+
+export function levelProgress(xp: number): LevelProgress {
+  const level = levelFromXp(xp);
+  const currentLevelAt = xpThreshold(level - 1);
+  const nextLevelAt = xpThreshold(level);
+  const xpIntoLevel = xp - currentLevelAt;
+  const span = nextLevelAt - currentLevelAt;
+  return {
+    level,
+    xpIntoLevel,
+    xpForCurrentLevel: currentLevelAt,
+    nextLevelAt,
+    progress: span > 0 ? Math.round((xpIntoLevel / span) * 100) : 100,
+  };
+}

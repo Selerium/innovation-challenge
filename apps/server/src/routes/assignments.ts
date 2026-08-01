@@ -5,6 +5,7 @@ import { requireAuth } from "../middleware/auth.ts";
 import type { AuthenticatedRequest } from "../middleware/auth.ts";
 import { GenerateAssignmentSchema, SubmitAssignmentAnswersSchema } from "@repo/shared";
 import type { ChatMessage } from "../lib/ai.ts";
+import { addXp, XP } from "../lib/gamification.ts";
 
 const router = express.Router();
 
@@ -156,7 +157,14 @@ router.post("/:id/submit", requireAuth, async (req: AuthenticatedRequest, res) =
       },
     });
 
-    return res.json({ success: true, data: submission });
+    // Award flat XP once per assignment (idempotent via refId = assignment.id)
+    let xp: any = null;
+    const result = await addXp(req.profileId!, XP.ASSIGNMENT_SUBMITTED, "ASSIGNMENT_SUBMITTED", assignment.id);
+    if (result) {
+      xp = { xpAwarded: result.xpAwarded, totalXp: result.totalXp, level: result.level, leveledUp: result.leveledUp };
+    }
+
+    return res.json({ success: true, data: { ...submission, xp } });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });
   }

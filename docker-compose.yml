@@ -24,6 +24,7 @@ services:
     volumes:
       - ./apps/server/src:/app/apps/server/src
       - ./apps/server/prisma:/app/apps/server/prisma
+      - ./packages/shared:/app/packages/shared
     environment:
       DATABASE_URL: ${DATABASE_URL}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
@@ -41,6 +42,7 @@ services:
       - "3000:3000"
     volumes:
       - ./apps/web/src:/app/apps/web/src
+      - ./packages/shared:/app/packages/shared
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:4000
       NEXT_PUBLIC_WS_URL: ws://localhost:4000
