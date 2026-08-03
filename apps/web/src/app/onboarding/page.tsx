@@ -1,18 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { PageLoading } from "@/components/ui/loading";
 
 export default function Onboarding() {
   const router = useRouter();
+  const [checking, setChecking] = useState(true);
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
   const [role, setRole] = useState<"STUDENT" | "TEACHER">("STUDENT");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    async function checkSession() {
+      const sessionResult = await api("/api/session");
+      if (!sessionResult.success || !sessionResult.data?.data?.profile) {
+        router.replace("/auth/sign-in");
+        return;
+      }
+      if (sessionResult.data.data.profile.onboardingDone) {
+        router.replace("/dashboard");
+        return;
+      }
+      setChecking(false);
+    }
+    checkSession();
+  }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -28,10 +47,15 @@ export default function Onboarding() {
 
     if (!result.success) {
       setError(result.error || "Failed to save profile");
+      toast.error(result.error || "Failed to save profile");
       return;
     }
 
     router.push("/dashboard");
+  }
+
+  if (checking) {
+    return <PageLoading />;
   }
 
   return (
@@ -114,6 +138,15 @@ export default function Onboarding() {
             {loading ? "Saving..." : "Get Started"}
           </button>
         </form>
+
+        <button
+          type="button"
+          onClick={() => router.push("/dashboard")}
+          disabled={loading}
+          className="mt-4 w-full text-center text-sm text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+        >
+          Skip for now
+        </button>
       </div>
     </div>
   );

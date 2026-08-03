@@ -2,7 +2,10 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { PageLoading, ErrorState } from "@/components/ui/loading";
+import { InboxIcon } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -41,6 +44,7 @@ export default function PeerLearningPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [entries, setEntries] = useState<TutoringEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Teach form
   const [teachSubject, setTeachSubject] = useState("");
@@ -55,16 +59,22 @@ export default function PeerLearningPage() {
   const loadSubjects = useCallback(async () => {
     const result = await api<{ data: Subject[] }>("/api/subjects");
     if (result.success) setSubjects(result.data!.data);
+    return result;
   }, []);
 
   const loadEntries = useCallback(async () => {
     const result = await api<{ data: TutoringEntry[] }>("/api/tutoring/my");
     if (result.success) setEntries(result.data!.data);
+    return result;
   }, []);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
-    await Promise.all([loadSubjects(), loadEntries()]);
+    setError(null);
+    const results = await Promise.all([loadSubjects(), loadEntries()]);
+    if (!results.every((r) => r.success)) {
+      setError("Failed to load your peer learning info.");
+    }
     setLoading(false);
   }, [loadSubjects, loadEntries]);
 
@@ -77,28 +87,44 @@ export default function PeerLearningPage() {
   async function handleOffer() {
     if (!teachSubject || offering) return;
     setOffering(true);
-    await api("/api/tutoring/offer", {
+    const result = await api("/api/tutoring/offer", {
       method: "POST",
       body: { topic: teachSubject, grade: teachGrade },
     });
     setOffering(false);
-    await loadEntries();
+    if (result.success) {
+      setTeachSubject("");
+      setTeachGrade("");
+      await loadEntries();
+    } else {
+      toast.error(result.error || "Could not create your offer.");
+    }
   }
 
   async function handleRequest() {
     if (!learnSubject || requesting) return;
     setRequesting(true);
-    await api("/api/tutoring/request", {
+    const result = await api("/api/tutoring/request", {
       method: "POST",
       body: { topic: learnSubject, grade: learnGrade },
     });
     setRequesting(false);
-    await loadEntries();
+    if (result.success) {
+      setLearnSubject("");
+      setLearnGrade("");
+      await loadEntries();
+    } else {
+      toast.error(result.error || "Could not create your request.");
+    }
   }
 
   async function handleClose(id: string) {
-    await api(`/api/tutoring/${id}/close`, { method: "POST" });
-    await loadEntries();
+    const result = await api(`/api/tutoring/${id}/close`, { method: "POST" });
+    if (result.success) {
+      await loadEntries();
+    } else {
+      toast.error(result.error || "Could not close the session.");
+    }
   }
 
   const openTeach = entries.filter((e) => e.type === "TEACH" && e.status === "OPEN");
@@ -121,11 +147,7 @@ export default function PeerLearningPage() {
   });
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
-    );
+    return <PageLoading />;
   }
 
   return (
@@ -135,6 +157,21 @@ export default function PeerLearningPage() {
           <h1 className="text-3xl font-bold">Peer Learning</h1>
           <p className="subheading text-muted-foreground mt-1">Learn together with classmates</p>
         </div>
+
+        {error && (
+          <ErrorState message={error} onRetry={loadAll} />
+        )}
+
+        {subjects.length === 0 && !error && (
+          <div className="rounded-xl border border-dashed border-border bg-secondary p-6 text-center">
+            <p className="text-sm text-muted-foreground">
+              You need at least one subject to offer help or request tutoring.{" "}
+              <Link href="/subjects" className="font-medium text-primary hover:underline">
+                Add a subject first
+              </Link>
+            </p>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Teach Card */}
@@ -182,7 +219,7 @@ export default function PeerLearningPage() {
               </button>
             </div>
 
-            {openTeach.length > 0 && (
+            {openTeach.length > 0 ? (
               <div className="mt-4 pt-4 border-t border-border">
                 <h3 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">
                   Your offers ({openTeach.length})
@@ -199,6 +236,13 @@ export default function PeerLearningPage() {
                       </span>
                     </div>
                   ))}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 pt-4 border-t border-border">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <InboxIcon className="size-4 shrink-0" />
+                  No active offers yet
                 </div>
               </div>
             )}
@@ -249,7 +293,7 @@ export default function PeerLearningPage() {
               </button>
             </div>
 
-            {openLearn.length > 0 && (
+            {openLearn.length > 0 ? (
               <div className="mt-4 pt-4 border-t border-border">
                 <h3 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">
                   Waiting for tutor ({openLearn.length})
@@ -268,12 +312,19 @@ export default function PeerLearningPage() {
                   ))}
                 </div>
               </div>
+            ) : (
+              <div className="mt-4 pt-4 border-t border-border">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <InboxIcon className="size-4 shrink-0" />
+                  No pending requests
+                </div>
+              </div>
             )}
           </div>
         </div>
 
         {/* Active Sessions */}
-        {matchedSessions.length > 0 && (
+        {matchedSessions.length > 0 ? (
           <div>
             <h2 className="text-lg font-semibold mb-3">Active Sessions</h2>
             <div className="space-y-2">
@@ -308,6 +359,14 @@ export default function PeerLearningPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        ) : (
+          <div>
+            <h2 className="text-lg font-semibold mb-3">Active Sessions</h2>
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-secondary px-5 py-4 text-sm text-muted-foreground">
+              <InboxIcon className="size-4 shrink-0" />
+              No active sessions yet — offers and requests are matched automatically.
             </div>
           </div>
         )}

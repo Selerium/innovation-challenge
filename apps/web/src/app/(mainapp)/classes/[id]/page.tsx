@@ -4,36 +4,65 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { PageLoading, ErrorState } from "@/components/ui/loading";
 
 export default function ClassDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<any>(null);
   const [copied, setCopied] = useState(false);
+  const [acting, setActing] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
+      setLoading(true);
+      setError(null);
       const result = await api(`/api/classes/${params.id}`);
-      if (!result.success) {
-        router.push("/classes");
-        return;
+      if (cancelled) return;
+      if (result.success) {
+        setData(result.data.data);
+      } else {
+        setError(result.error || "Failed to load this class.");
       }
-      setData(result.data.data);
       setLoading(false);
     }
     load();
-  }, [params.id, router]);
+    return () => { cancelled = true; };
+  }, [params.id]);
 
   if (loading) {
+    return <PageLoading />;
+  }
+
+  if (error || !data) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
+      <div className="p-8">
+        <div className="max-w-4xl mx-auto">
+          <ErrorState
+            message={error || "This class could not be found."}
+            onRetry={() => {
+              setData(null);
+              setLoading(true);
+              setError(null);
+              api(`/api/classes/${params.id}`).then((r) => {
+                if (r.success) setData(r.data.data);
+                else setError(r.error || "Failed to load this class.");
+                setLoading(false);
+              });
+            }}
+          />
+          <div className="mt-4 text-center">
+            <Link href="/classes" className="text-sm text-muted-foreground hover:text-primary transition-colors">
+              &larr; All classes
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
-
-  if (!data) return null;
 
   async function handleCopy() {
     if (data.inviteCode) {
@@ -44,12 +73,14 @@ export default function ClassDetailPage() {
   }
 
   async function handleLeave() {
+    setActing(true);
     await api(`/api/classes/${data.id}/leave`, { method: "POST" });
     router.push("/classes");
   }
 
   async function handleDelete() {
     if (!confirm(`Delete "${data.name}" and remove all members?`)) return;
+    setActing(true);
     await api(`/api/classes/${data.id}`, { method: "DELETE" });
     router.push("/classes");
   }
@@ -72,17 +103,19 @@ export default function ClassDetailPage() {
             {!data.isTeacher && (
               <button
                 onClick={handleLeave}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-destructive/10 hover:text-destructive transition-colors"
+                disabled={acting}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-destructive/10 hover:text-destructive disabled:opacity-50 transition-colors"
               >
-                Leave Class
+                {acting ? "Leaving..." : "Leave Class"}
               </button>
             )}
             {data.isTeacher && (
               <button
                 onClick={handleDelete}
-                className="rounded-lg border border-destructive/40 px-4 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                disabled={acting}
+                className="rounded-lg border border-destructive/40 px-4 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50 transition-colors"
               >
-                Delete Class
+                {acting ? "Deleting..." : "Delete Class"}
               </button>
             )}
           </div>

@@ -12,15 +12,20 @@ export async function api<T = any>(
 ): Promise<{ success: boolean; data?: T; error?: string }> {
   const { method = "GET", body, headers = {} } = options;
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      ...headers,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-    credentials: "include",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        ...headers,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      credentials: "include",
+    });
+  } catch {
+    return { success: false, error: "Network error — please check your connection and try again." };
+  }
 
   const data = await res.json().catch(() => null);
   const bodyMsg =

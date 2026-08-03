@@ -2,8 +2,11 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useStudySession } from "@/lib/use-study-session";
+import { PageLoading, ErrorState } from "@/components/ui/loading";
 
 type Suggestion = {
   name: string;
@@ -47,6 +50,7 @@ export default function SubjectDetailPage() {
   const router = useRouter();
   const [subject, setSubject] = useState<SubjectData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -61,9 +65,13 @@ export default function SubjectDetailPage() {
   });
 
   const loadSubject = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     const result = await api<{ data: SubjectData }>(`/api/subjects/${id}`);
     if (result.success && result.data) {
       setSubject(result.data.data);
+    } else {
+      setError(result.error || "Failed to load this subject.");
     }
     setLoading(false);
   }, [id]);
@@ -113,6 +121,8 @@ export default function SubjectDetailPage() {
     if (result.success && result.data) {
       const reply: ChatMsg = { role: "assistant", content: result.data.data.response, timestamp: new Date().toISOString(), topicId: selectedTopicId };
       setMessages((prev) => [...prev, reply]);
+    } else {
+      toast.error(result.error || "The AI tutor could not respond right now.");
     }
   }
 
@@ -135,6 +145,8 @@ export default function SubjectDetailPage() {
           ),
         };
       });
+    } else {
+      toast.error(result.error || "Could not generate an explanation right now.");
     }
   }
 
@@ -157,6 +169,8 @@ export default function SubjectDetailPage() {
           ),
         };
       });
+    } else {
+      toast.error(result.error || "Could not suggest topics right now.");
     }
   }
 
@@ -171,21 +185,32 @@ export default function SubjectDetailPage() {
     setGenerating(false);
     if (result.success && result.data) {
       router.push(`/assignments/${result.data.data.id}`);
+    } else {
+      toast.error(result.error || "Could not generate an assignment right now.");
     }
   }
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
-    );
+    return <PageLoading />;
   }
 
-  if (!subject) {
+  if (error || !subject) {
     return (
       <div className="p-8">
-        <div className="text-muted-foreground">Subject not found</div>
+        <div className="max-w-4xl mx-auto">
+          <ErrorState
+            message={error || "This subject could not be found."}
+            onRetry={() => {
+              setSubject(null);
+              loadSubject();
+            }}
+          />
+          <div className="mt-4 text-center">
+            <Link href="/subjects" className="text-sm text-muted-foreground hover:text-primary transition-colors">
+              &larr; All subjects
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
@@ -199,9 +224,12 @@ export default function SubjectDetailPage() {
 
         {/* Subject info card */}
         <div className="rounded-xl border border-border bg-secondary p-6">
-          <div className="flex items-start justify-between">
+          <Link href="/subjects" className="text-sm text-muted-foreground hover:text-primary transition-colors">
+            &larr; All subjects
+          </Link>
+          <div className="flex items-start justify-between mt-3">
             <div>
-              <h1 className="text-2xl font-bold">{subject.name}</h1>
+              <h1 className="text-3xl font-bold">{subject.name}</h1>
               <p className="subheading text-muted-foreground mt-1">
                 {subject.grade}{subject.scope ? ` · ${subject.scope}` : ""}
               </p>
@@ -219,29 +247,35 @@ export default function SubjectDetailPage() {
           <div className="w-72 shrink-0">
             <div className="rounded-xl border border-border bg-secondary p-4">
               <h2 className="font-semibold mb-3">Topics</h2>
-              <div className="space-y-1">
-                {subject.topic.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => {
-                      markActive();
-                      setSelectedTopicId(t.id);
-                    }}
-                    className={`w-full text-left rounded-lg px-3 py-2.5 text-sm transition-colors ${
-                      selectedTopicId === t.id
-                        ? "bg-primary/10 text-primary font-medium"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate">{t.name}</span>
-                      <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${statusColor[t.status]}`}>
-                        {t.progress}%
-                      </span>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              {subject.topic.length > 0 ? (
+                <div className="space-y-1">
+                  {subject.topic.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => {
+                        markActive();
+                        setSelectedTopicId(t.id);
+                      }}
+                      className={`w-full text-left rounded-lg px-3 py-2.5 text-sm transition-colors ${
+                        selectedTopicId === t.id
+                          ? "bg-primary/10 text-primary font-medium"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate">{t.name}</span>
+                        <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${statusColor[t.status]}`}>
+                          {t.progress}%
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No topics yet. Generate one with the AI tutor to start studying.
+                </p>
+              )}
             </div>
           </div>
 
@@ -370,7 +404,7 @@ export default function SubjectDetailPage() {
                   <div>
                     <h3 className="font-semibold mb-3">{selectedTopic.name}</h3>
                     <p className="text-sm text-muted-foreground">
-                      Click "Explain This Topic" for a detailed breakdown, or "Suggest Next Topics" to see what to study next.
+                      Click "Explain" for a detailed breakdown, or "Suggest" to see what to study next.
                     </p>
                   </div>
                 ) : null}

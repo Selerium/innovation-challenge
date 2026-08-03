@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useWebSocket } from "@/lib/use-websocket";
 import { useProfile } from "@/lib/profile-context";
@@ -34,6 +35,7 @@ export default function FriendsChatPage() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [loadingConvs, setLoadingConvs] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { on } = useWebSocket();
   const selectedRef = useRef(selected);
@@ -59,10 +61,12 @@ export default function FriendsChatPage() {
 
   // Load messages for selected conversation
   const loadMessages = useCallback(async (conversationId: string) => {
+    setLoadingMessages(true);
     const r = await api<{ data: Message[] }>(`/api/chat/${conversationId}/messages`);
     if (r.success && r.data) {
       setMessages(r.data.data);
     }
+    setLoadingMessages(false);
   }, []);
 
   useEffect(() => {
@@ -104,6 +108,8 @@ export default function FriendsChatPage() {
       setMessages((prev) => [...prev, message]);
       setInput("");
       loadConversations();
+    } else {
+      toast.error(r.error || "Could not send your message.");
     }
     setSending(false);
   };
@@ -129,16 +135,25 @@ export default function FriendsChatPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-4rem)]">
-      {/* Sidebar */}
-      <div className="w-80 border-r border-border flex flex-col shrink-0">
-        <div className="p-4 border-b border-border">
-          <h2 className="text-lg font-semibold">Conversations</h2>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {loadingConvs ? (
-            <div className="p-4 text-sm text-muted-foreground">Loading...</div>
-          ) : conversations.length === 0 ? (
+    <div className="flex flex-col h-[calc(100vh-4rem)]">
+      <div className="px-6 pt-6 pb-4 border-b border-border">
+        <h1 className="text-3xl font-bold">Friends Chat</h1>
+        <p className="subheading text-muted-foreground mt-1">Chat with classmates and tutoring partners</p>
+      </div>
+
+      <div className="flex flex-1 min-h-0">
+        {/* Sidebar */}
+        <div className="w-80 border-r border-border flex flex-col shrink-0">
+          <div className="p-4 border-b border-border">
+            <h2 className="text-lg font-semibold">Conversations</h2>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {loadingConvs ? (
+              <div className="flex items-center justify-center gap-2 p-4 text-sm text-muted-foreground">
+                <span className="inline-block size-4 animate-spin rounded-full border-2 border-border border-t-primary" />
+                Loading...
+              </div>
+            ) : conversations.length === 0 ? (
             <div className="p-4 text-sm text-muted-foreground">
               No conversations yet. Start a peer tutoring session to chat.
             </div>
@@ -188,7 +203,12 @@ export default function FriendsChatPage() {
               <h3 className="font-semibold">{selected.peer?.displayName ?? "Unknown"}</h3>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {messages.length === 0 ? (
+              {loadingMessages ? (
+                <div className="flex items-center justify-center gap-2 pt-8 text-sm text-muted-foreground">
+                  <span className="inline-block size-4 animate-spin rounded-full border-2 border-border border-t-primary" />
+                  Loading messages...
+                </div>
+              ) : messages.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center pt-8">No messages yet. Say hello!</p>
               ) : (
                 messages.map((msg) => {
@@ -246,6 +266,7 @@ export default function FriendsChatPage() {
             Select a conversation to start chatting
           </div>
         )}
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
@@ -8,27 +8,34 @@ import { useProfile } from "@/lib/profile-context";
 import { levelProgress } from "@repo/shared";
 import { AddSubjectModal } from "@/components/subjects/add-subject-modal";
 import { JoinClassModal } from "@/components/classes/class-modals";
+import { SkeletonRows } from "@/components/ui/loading";
 
 export default function Dashboard() {
   const router = useRouter();
   const { user, profile } = useProfile();
   const [subjects, setSubjects] = useState<any[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
+  const [assignments, setAssignments] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [classModalOpen, setClassModalOpen] = useState(false);
 
-  useEffect(() => {
-    api<{ data: any[] }>("/api/subjects").then((r) => {
-      if (r.success) setSubjects(r.data!.data);
-    });
-    api<{ data: any[] }>("/api/classes").then((r) => {
-      if (r.success) setClasses(r.data!.data);
-    });
-    api<{ data: any[] }>("/api/burnout/alerts").then((r) => {
-      if (r.success) setAlerts(r.data!.data.filter((a) => !a.resolved));
-    });
+  const load = useCallback(async () => {
+    const [s, c, a, al] = await Promise.all([
+      api<{ data: any[] }>("/api/subjects"),
+      api<{ data: any[] }>("/api/classes"),
+      api<{ data: any[] }>("/api/assignments"),
+      api<{ data: any[] }>("/api/burnout/alerts"),
+    ]);
+    if (s.success) setSubjects(s.data!.data);
+    if (c.success) setClasses(c.data!.data);
+    if (a.success) setAssignments(a.data!.data);
+    if (al.success) setAlerts(al.data!.data.filter((x: any) => !x.resolved));
+    setLoading(false);
   }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   const p = profile;
 
@@ -91,7 +98,9 @@ export default function Dashboard() {
                 </span>
               </div>
             </div>
-            {subjects.length > 0 ? (
+            {loading ? (
+              <SkeletonRows count={3} />
+            ) : subjects.length > 0 ? (
               <div className="space-y-2">
                 {subjects.slice(0, 5).map((s) => (
                   <Link
@@ -130,19 +139,46 @@ export default function Dashboard() {
           <div className="rounded-xl border border-border bg-secondary p-6">
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold">Assignments</h3>
-              <span
-                onClick={() => {}}
+              <Link
+                href="/subjects"
                 className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                   subjects.length === 0
                     ? "cursor-not-allowed bg-muted text-muted-foreground opacity-40"
                     : "cursor-pointer border border-border hover:bg-muted"
                 }`}
-                title={subjects.length === 0 ? "Add a subject first" : undefined}
+                title={subjects.length === 0 ? "Add a subject first to generate assignments" : "Pick a topic to generate an assignment"}
               >
                 + Add
-              </span>
+              </Link>
             </div>
-            <p className="text-sm text-muted-foreground">No assignments yet</p>
+            {loading ? (
+              <SkeletonRows count={2} />
+            ) : assignments.length > 0 ? (
+              <div className="space-y-2">
+                {assignments.slice(0, 4).map((a) => (
+                  <Link
+                    key={a.id}
+                    href={`/assignments/${a.id}`}
+                    className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-muted transition-colors group"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium truncate">{a.title}</div>
+                      <div className="text-xs text-muted-foreground">{a.subject?.name}</div>
+                    </div>
+                    <span className="text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity font-medium">
+                      Open &rarr;
+                    </span>
+                  </Link>
+                ))}
+                <Link href="/assignments" className="block text-center text-xs text-muted-foreground hover:text-primary pt-1 transition-colors">
+                  View all assignments
+                </Link>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No assignments yet — generate one from any topic in your subjects.
+              </p>
+            )}
           </div>
         </div>
 
@@ -159,7 +195,9 @@ export default function Dashboard() {
               </span>
             </div>
           </div>
-          {classes.length > 0 ? (
+          {loading ? (
+            <SkeletonRows count={3} />
+          ) : classes.length > 0 ? (
             <div className="space-y-2">
               {classes.map((c) => (
                 <Link
@@ -227,20 +265,14 @@ export default function Dashboard() {
         )}
       </div>
 
-      <AddSubjectModal open={modalOpen} onClose={() => setModalOpen(false)} onCreated={() => {
-        api<{ data: any[] }>("/api/subjects").then((r) => {
-          if (r.success) setSubjects(r.data!.data);
-        });
-      }} />
+      <AddSubjectModal open={modalOpen} onClose={() => setModalOpen(false)} onCreated={load} />
 
       <JoinClassModal
         open={classModalOpen}
         onClose={() => setClassModalOpen(false)}
         onDone={() => {
           setClassModalOpen(false);
-          api<{ data: any[] }>("/api/classes").then((r) => {
-            if (r.success) setClasses(r.data!.data);
-          });
+          load();
         }}
       />
     </div>

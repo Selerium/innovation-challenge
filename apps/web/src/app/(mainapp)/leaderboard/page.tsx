@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { api } from "@/lib/api";
+import { PageLoading, EmptyState, ErrorState } from "@/components/ui/loading";
 
 type Entry = {
   profileId: string;
@@ -25,27 +26,27 @@ const rankBadge = (rank: number) =>
 
 export default function LeaderboardPage() {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [yourRank, setYourRank] = useState<number | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      const result = await api(`/api/gamification/leaderboard`);
-      if (result.success && result.data) {
-        setEntries(result.data.data.entries);
-        setYourRank(result.data.data.yourRank);
-      }
-      setLoading(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const result = await api(`/api/gamification/leaderboard`);
+    if (result.success && result.data) {
+      setEntries(result.data.data.entries);
+      setYourRank(result.data.data.yourRank);
+    } else {
+      setError(result.error || "Failed to load the leaderboard.");
     }
-    load();
+    setLoading(false);
   }, []);
 
+  useEffect(() => { load(); }, [load]);
+
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
-    );
+    return <PageLoading />;
   }
 
   return (
@@ -72,12 +73,13 @@ export default function LeaderboardPage() {
           </div>
         )}
 
-        {entries.length === 0 ? (
-          <div className="rounded-xl border border-border bg-secondary p-12 text-center">
-            <p className="text-sm text-muted-foreground">
-              No students on the leaderboard yet. Start studying to be the first!
-            </p>
-          </div>
+        {error ? (
+          <ErrorState message={error} onRetry={load} />
+        ) : entries.length === 0 ? (
+          <EmptyState
+            title="No students yet"
+            description="No students on the leaderboard yet. Start studying to be the first!"
+          />
         ) : (
           <div className="rounded-xl border border-border bg-secondary overflow-hidden">
             <ul className="divide-y divide-border">

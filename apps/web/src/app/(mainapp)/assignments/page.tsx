@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { PageLoading, EmptyState, ErrorState } from "@/components/ui/loading";
 
 type Assignment = {
   id: string;
@@ -16,11 +17,17 @@ type Assignment = {
 export default function AssignmentsPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     const result = await api<{ data: Assignment[] }>("/api/assignments");
-    if (result.success) setAssignments(result.data!.data);
+    if (result.success) {
+      setAssignments(result.data!.data);
+    } else {
+      setError(result.error || "Failed to load assignments.");
+    }
     setLoading(false);
   }, []);
 
@@ -34,11 +41,7 @@ export default function AssignmentsPage() {
   }, {});
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
-    );
+    return <PageLoading />;
   }
 
   return (
@@ -49,11 +52,21 @@ export default function AssignmentsPage() {
           <p className="subheading text-muted-foreground mt-1">View and complete your assignments</p>
         </div>
 
-        {assignments.length === 0 ? (
-          <div className="rounded-xl border border-border bg-secondary p-12 text-center">
-            <p className="text-muted-foreground">No assignments yet</p>
-            <p className="text-sm text-muted-foreground mt-2">Generate an assignment from any topic in your subjects.</p>
-          </div>
+        {error ? (
+          <ErrorState message={error} onRetry={load} />
+        ) : assignments.length === 0 ? (
+          <EmptyState
+            title="No assignments yet"
+            description="Generate an assignment from any topic in your subjects."
+            action={
+              <Link
+                href="/subjects"
+                className="rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                Go to Subjects
+              </Link>
+            }
+          />
         ) : (
           <div className="space-y-8">
             {Object.entries(grouped).map(([subjectName, items]) => (

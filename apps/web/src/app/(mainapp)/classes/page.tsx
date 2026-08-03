@@ -1,31 +1,36 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useProfile } from "@/lib/profile-context";
 import { JoinClassModal, CreateClassModal } from "@/components/classes/class-modals";
+import { PageLoading, EmptyState, ErrorState } from "@/components/ui/loading";
 
 export default function ClassesPage() {
   const { user } = useProfile();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [classes, setClasses] = useState<any[]>([]);
   const [joinOpen, setJoinOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
-  useEffect(() => {
-    api<{ data: any[] }>("/api/classes").then((r) => {
-      if (r.success) setClasses(r.data!.data);
-      setLoading(false);
-    });
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const result = await api<{ data: any[] }>("/api/classes");
+    if (result.success) {
+      setClasses(result.data!.data);
+    } else {
+      setError(result.error || "Failed to load classes.");
+    }
+    setLoading(false);
   }, []);
 
+  useEffect(() => { load(); }, [load]);
+
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
-    );
+    return <PageLoading />;
   }
 
   const isTeacher = user?.role === "TEACHER";
@@ -58,7 +63,9 @@ export default function ClassesPage() {
           </div>
         </div>
 
-        {classes.length > 0 ? (
+        {error ? (
+          <ErrorState message={error} onRetry={load} />
+        ) : classes.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {classes.map((c) => (
               <Link
@@ -85,19 +92,22 @@ export default function ClassesPage() {
             ))}
           </div>
         ) : (
-          <div className="rounded-xl border border-border bg-secondary p-12 text-center">
-            <p className="text-sm text-muted-foreground mb-4">
-              {isTeacher
+          <EmptyState
+            title={isTeacher ? "No classes yet" : "No classes yet"}
+            description={
+              isTeacher
                 ? "You haven't created any classes yet. Create one to get an invite code."
-                : "You haven't joined any classes yet. Ask your teacher for an invite code."}
-            </p>
-            <button
-              onClick={() => (isTeacher ? setCreateOpen(true) : setJoinOpen(true))}
-              className="rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-            >
-              {isTeacher ? "Create Your First Class" : "Join a Class"}
-            </button>
-          </div>
+                : "You haven't joined any classes yet. Ask your teacher for an invite code."
+            }
+            action={
+              <button
+                onClick={() => (isTeacher ? setCreateOpen(true) : setJoinOpen(true))}
+                className="rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                {isTeacher ? "Create Your First Class" : "Join a Class"}
+              </button>
+            }
+          />
         )}
       </div>
 

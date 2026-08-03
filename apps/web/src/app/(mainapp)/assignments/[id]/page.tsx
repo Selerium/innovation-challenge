@@ -2,9 +2,11 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useProfile } from "@/lib/profile-context";
+import { PageLoading, ErrorState, EmptyState } from "@/components/ui/loading";
 
 type Question = {
   id: string;
@@ -37,6 +39,7 @@ export default function AssignmentDetailPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError("");
     const result = await api<{ data: Assignment }>(`/api/assignments/${id}`);
     if (result.success && result.data) {
       const a = result.data.data;
@@ -54,6 +57,8 @@ export default function AssignmentDetailPage() {
         }
         setAnswers(initial);
       }
+    } else {
+      setError(result.error || "Failed to load this assignment.");
     }
     setLoading(false);
   }, [id]);
@@ -86,21 +91,32 @@ export default function AssignmentDetailPage() {
         }
         refreshProfile();
       }
+    } else {
+      setError(result.error || "Something went wrong submitting your answers.");
     }
   }
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
-    );
+    return <PageLoading />;
   }
 
-  if (!assignment) {
+  if (error || !assignment) {
     return (
       <div className="p-8">
-        <div className="text-muted-foreground">Assignment not found</div>
+        <div className="max-w-3xl mx-auto">
+          <ErrorState
+            message={error || "This assignment could not be found."}
+            onRetry={() => {
+              setAssignment(null);
+              load();
+            }}
+          />
+          <div className="mt-4 text-center">
+            <Link href="/assignments" className="text-sm text-muted-foreground hover:text-primary transition-colors">
+              &larr; All assignments
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
@@ -109,13 +125,18 @@ export default function AssignmentDetailPage() {
     month: "long", day: "numeric", year: "numeric",
   });
 
+  const questions = assignment.content?.questions ?? [];
+
   return (
     <div className="p-8">
       <div className="max-w-3xl mx-auto space-y-6">
         <div className="rounded-xl border border-border bg-secondary p-6">
-          <div className="flex items-start justify-between">
+          <Link href="/assignments" className="text-sm text-muted-foreground hover:text-primary transition-colors">
+            &larr; All assignments
+          </Link>
+          <div className="flex items-start justify-between mt-3">
             <div>
-              <h1 className="text-2xl font-bold">{assignment.title}</h1>
+              <h1 className="text-3xl font-bold">{assignment.title}</h1>
               <p className="subheading text-muted-foreground mt-1">
                 {assignment.subject.name} ({assignment.subject.grade})
               </p>
@@ -131,7 +152,8 @@ export default function AssignmentDetailPage() {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {questions.length > 0 ? (
+          <form onSubmit={handleSubmit} className="space-y-4">
           {assignment.content.questions.map((q, i) => (
             <div key={q.id} className="rounded-xl border border-border bg-secondary p-5">
               <label className="text-sm font-medium mb-2 block">
@@ -166,7 +188,21 @@ export default function AssignmentDetailPage() {
               {error && <p className="text-sm text-destructive">{error}</p>}
             </div>
           )}
-        </form>
+          </form>
+        ) : (
+          <EmptyState
+            title="No questions yet"
+            description="This assignment was created without any questions. Try generating a new one from the subject page."
+            action={
+              <Link
+                href="/subjects"
+                className="rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                Browse Subjects
+              </Link>
+            }
+          />
+        )}
       </div>
     </div>
   );

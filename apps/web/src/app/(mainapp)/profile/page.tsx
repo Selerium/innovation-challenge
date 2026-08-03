@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { api } from "@/lib/api";
 import { useProfile } from "@/lib/profile-context";
 import { levelProgress } from "@repo/shared";
+import { InlineLoading, ErrorState } from "@/components/ui/loading";
 
 const reasonLabel: Record<string, string> = {
   STUDY_SESSION: "Study session",
@@ -15,16 +16,25 @@ export default function ProfilePage() {
   const { user, profile } = useProfile();
   const [transactions, setTransactions] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api("/api/gamification/transactions").then((r) => {
-      if (r.success) setTransactions(r.data.data);
-    });
-
-    api("/api/study-sessions").then((r) => {
-      if (r.success) setSessions(r.data.data);
-    });
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const [tx, ss] = await Promise.all([
+      api("/api/gamification/transactions"),
+      api("/api/study-sessions"),
+    ]);
+    if (tx.success) setTransactions(tx.data.data);
+    if (ss.success) setSessions(ss.data.data);
+    if (!tx.success || !ss.success) {
+      setError(tx.error || ss.error || "Failed to load profile activity.");
+    }
+    setLoading(false);
   }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   const p = profile;
 
@@ -36,7 +46,10 @@ export default function ProfilePage() {
   return (
     <div className="p-8">
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">Profile</h1>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold">Profile</h1>
+          <p className="subheading text-muted-foreground mt-1">Your XP, activity and study history</p>
+        </div>
         <div className="rounded-xl border border-border bg-secondary p-6 space-y-4">
           <div className="flex items-center gap-4">
             <div className="flex size-16 items-center justify-center rounded-full bg-primary/20 text-2xl font-bold text-primary">
@@ -62,11 +75,15 @@ export default function ProfilePage() {
           </div>
         </div>
 
+        {error && <div className="mt-8"><ErrorState message={error} onRetry={load} /></div>}
+
         <div className="mt-8 rounded-xl border border-border bg-secondary">
           <div className="border-b border-border px-5 py-3">
             <h3 className="font-semibold">Recent Activity</h3>
           </div>
-          {transactions.length > 0 ? (
+          {loading ? (
+            <InlineLoading label="Loading activity..." />
+          ) : transactions.length > 0 ? (
             <ul className="divide-y divide-border">
               {transactions.map((t) => (
                 <li key={t.id} className="flex items-center justify-between px-5 py-3">
@@ -93,7 +110,9 @@ export default function ProfilePage() {
           <div className="border-b border-border px-5 py-3">
             <h3 className="font-semibold">Study Sessions</h3>
           </div>
-          {completedSessions.length > 0 ? (
+          {loading ? (
+            <InlineLoading label="Loading sessions..." />
+          ) : completedSessions.length > 0 ? (
             <ul className="divide-y divide-border">
               {completedSessions.slice(0, 10).map((s) => (
                 <li key={s.id} className="flex items-center justify-between px-5 py-3">

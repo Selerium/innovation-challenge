@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2Icon } from "lucide-react";
 import { api } from "@/lib/api";
 
 type SessionUser = {
@@ -44,18 +45,26 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const result = await api("/api/session");
-      if (cancelled) return;
-      if (!result || !result.success || !result.data) {
-        router.push("/auth/sign-in");
-        return;
+      try {
+        const result = await api("/api/session");
+        if (cancelled) return;
+        const sessionData = (result.data as { data?: SessionData } | undefined)?.data;
+        if (!result.success || !sessionData) {
+          setLoading(false);
+          router.push("/auth/sign-in");
+          return;
+        }
+        if (sessionData.profile?.onboardingDone == false) {
+          setLoading(false);
+          router.push("/onboarding");
+          return;
+        }
+        setSession(sessionData);
+      } catch {
+        // never leave the app stuck on the loading screen
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      if (result.data.profile?.onboardingDone == false) {
-        router.push("/onboarding");
-        return;
-      }
-      setSession(result.data.data);
-      setLoading(false);
     }
     load();
     return () => {
@@ -66,14 +75,14 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const refreshProfile = useCallback(async () => {
     const result = await api("/api/session");
     if (result.success && result.data?.data) {
-      setSession(result.data.data);
+      setSession((result.data as { data: SessionData }).data);
     }
   }, []);
 
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
+        <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
       </div>
     );
   }

@@ -12,12 +12,10 @@ export default function SignIn() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
     setLoading(true);
 
     // Better Auth built-in endpoint
@@ -27,7 +25,6 @@ export default function SignIn() {
     });
 
     if (!result.success) {
-      setError(result.error || "Login failed");
       toast.error(result.error || "Login failed");
       setLoading(false);
       return;
@@ -59,12 +56,6 @@ export default function SignIn() {
       </div>
       <div className="w-full max-w-sm rounded-xl border border-border bg-secondary p-8">
         <h1 className="text-2xl font-bold text-center mb-6">Sign In</h1>
-
-        {error && (
-          <div className="mb-4 rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
