@@ -86,22 +86,6 @@ app.get("/api/session", async (req, res) => {
 });
 
 // Routes
-app.get("/api/auth/ws-token", async (req, res) => {
-  const { fromNodeHeaders } = await import("better-auth/node");
-  const session = await auth.api.getSession({
-    headers: fromNodeHeaders(req.headers),
-  });
-  if (!session?.user) {
-    return res.status(401).json({ success: false, error: "Unauthorized" });
-  }
-  const profile = await prisma.profile.findUnique({ where: { userId: session.user.id } });
-  if (!profile) {
-    return res.status(401).json({ success: false, error: "No profile" });
-  }
-  const token = wsManager.createToken(profile.id);
-  return res.json({ success: true, data: { token } });
-});
-
 app.use("/api/profile", profileRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/subjects", subjectRoutes);

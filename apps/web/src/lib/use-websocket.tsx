@@ -1,8 +1,8 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useCallback, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { toast } from "sonner";
-import { api } from "./api";
 
 type WsEvent = {
   type: string;
@@ -15,6 +15,7 @@ const WS_BASE = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:4000";
 
 type WsContextValue = {
   on: (eventType: string, handler: Handler) => () => void;
+  ready: boolean;
 };
 
 const WsContext = createContext<WsContextValue | null>(null);
@@ -36,54 +37,86 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
-    async function connect() {
-      try {
-        const result = await api<{ token: string }>("/api/auth/ws-token");
-        if (!result.success || !result.data?.token) return;
+    const scheduleRetry = (delay = 5000) => {
+      if (!mounted) return;
+      if (retryTimer) clearTimeout(retryTimer);
+      retryTimer = setTimeout(connect, delay);
+    };
 
-        const ws = new WebSocket(`${WS_BASE}/ws`);
-        wsRef.current = ws;
+    const connect = () => {
+      if (!mounted) return;
 
-        ws.onopen = () => {
-          ws.send(JSON.stringify({ type: "auth", token: result.data!.token }));
-        };
+      const current = wsRef.current;
+      if (current && (current.readyState === WebSocket.OPEN || current.readyState === WebSocket.CONNECTING)) {
+        return;
+      }
 
-        ws.onmessage = (event) => {
-          try {
-            const data: WsEvent = JSON.parse(event.data);
+      const ws = new WebSocket(`${WS_BASE}/ws`);
+      wsRef.current = ws;
 
-            if (data.type === "auth_ok") {
-              setReady(true);
-              return;
-            }
+      ws.onopen = () => {
+        setReady(true);
+      };
 
-            const handlers = handlersRef.current.get(data.type);
-            if (handlers) {
-              handlers.forEach((h) => h(data.payload));
-            }
-          } catch {}
-        };
+      ws.onmessage = (event) => {
+        try {
+          const data: WsEvent = JSON.parse(event.data);
 
-        ws.onerror = () => {};
-        ws.onclose = () => {
-          setReady(false);
-          wsRef.current = null;
-          if (mounted) setTimeout(connect, 5000);
-        };
-      } catch {}
-    }
+          if (data.type === "auth_ok") {
+            setReady(true);
+            return;
+          }
 
+          const handlers = handlersRef.current.get(data.type);
+          if (handlers) {
+            handlers.forEach((h) => h(data.payload));
+          }
+        } catch {}
+      };
+
+      ws.onerror = () => {};
+      ws.onclose = () => {
+        setReady(false);
+        if (wsRef.current === ws) wsRef.current = null;
+        scheduleRetry();
+      };
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible" || !mounted) return;
+      const s = wsRef.current;
+      if (!s || s.readyState === WebSocket.CLOSED || s.readyState === WebSocket.CLOSING) {
+        if (retryTimer) {
+          clearTimeout(retryTimer);
+          retryTimer = null;
+        }
+        connect();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
     connect();
 
     return () => {
       mounted = false;
-      wsRef.current?.close();
+      if (retryTimer) clearTimeout(retryTimer);
+      retryTimer = null;
+      document.removeEventListener("visibilitychange", onVisibility);
+      const ws = wsRef.current;
+      if (ws) {
+        ws.onclose = null;
+        ws.onerror = null;
+        ws.onmessage = null;
+        ws.close();
+        wsRef.current = null;
+      }
     };
   }, []);
 
   return (
-    <WsContext.Provider value={{ on }}>
+    <WsContext.Provider value={{ on, ready }}>
       {children}
     </WsContext.Provider>
   );
@@ -97,6 +130,9 @@ export function useWebSocket() {
 
 export function usePeerNotifications() {
   const { on } = useWebSocket();
+  const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
 
   useEffect(() => {
     const unsub1 = on("peer_match", (payload) => {
@@ -115,10 +151,11 @@ export function usePeerNotifications() {
     });
 
     const unsub3 = on("new_message", (payload) => {
-      const { senderId } = payload as any;
-      toast("New Message", {
-        description: "You received a new message",
-        action: { label: "Open", onClick: () => window.location.href = "/friends-chat" },
+      if (pathnameRef.current.startsWith("/friends-chat")) return;
+      const { senderName, senderId, content } = payload as any;
+      toast(String(senderName || "New Message"), {
+        description: content,
+        action: { label: "Open", onClick: () => window.location.href = `/friends-chat?peer=${senderId}` },
         duration: 6000,
       });
     });

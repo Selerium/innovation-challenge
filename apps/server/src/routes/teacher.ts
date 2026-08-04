@@ -7,6 +7,14 @@ const router = express.Router();
 
 const AT_RISK_THRESHOLD = 50;
 
+function contentQuestions(content: any): any[] {
+  return content && Array.isArray(content.questions) ? content.questions : [];
+}
+
+function maxScoreOf(content: any): number {
+  return contentQuestions(content).reduce((sum, q) => sum + (Number(q?.points) || 1), 0);
+}
+
 function avg(values: number[]): number | null {
   const valid = values.filter((v) => v != null);
   if (valid.length === 0) return null;
@@ -60,6 +68,62 @@ router.get("/analytics", requireAuth, requireRole(["TEACHER"]), async (req: Auth
     }
 
     return res.json({ success: true, data: analytics });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/teacher/submissions — All class-assignment submissions across your classes (grading queue)
+router.get("/submissions", requireAuth, requireRole(["TEACHER"]), async (req: AuthenticatedRequest, res) => {
+  try {
+    const classes = await prisma.eduClass.findMany({
+      where: { teacherId: req.profileId! },
+      select: { id: true, name: true, member: { select: { profileId: true } } },
+    });
+
+    const classById = new Map(classes.map((c) => [c.id, c.name]));
+    const memberIds = [...new Set(classes.flatMap((c) => c.member.map((m) => m.profileId)))];
+
+    const submissions = await prisma.assignmentSubmission.findMany({
+      where: {
+        profileId: { in: memberIds },
+        assignment: { class: { teacherId: req.profileId! } },
+      },
+      include: {
+        profile: { select: { displayName: true } },
+        assignment: {
+          select: {
+            title: true,
+            classId: true,
+            content: true,
+            subject: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { submittedAt: "desc" },
+    });
+
+    return res.json({
+      success: true,
+      data: submissions.map((s) => ({
+        id: s.id,
+        assignmentId: s.assignmentId,
+        assignmentTitle: s.assignment.title,
+        subjectName: s.assignment.subject.name,
+        classId: s.assignment.classId,
+        className: s.assignment.classId ? classById.get(s.assignment.classId) ?? null : null,
+        studentName: s.profile.displayName,
+        content: s.content,
+        questions: contentQuestions(s.assignment.content as any),
+        maxScore: maxScoreOf(s.assignment.content as any),
+        aiScore: s.aiScore,
+        aiFeedback: s.aiFeedback,
+        teacherScore: s.teacherScore,
+        teacherComment: s.teacherComment,
+        status: s.status,
+        submittedAt: s.submittedAt.toISOString(),
+      })),
+    });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -154,11 +218,13 @@ router.get(
 
       const memberIds = eduClass.member.map((m) => m.profileId);
 
+      const assignmentId = (req.query.assignmentId as string) || undefined;
+
       const submissions = await prisma.assignmentSubmission.findMany({
-        where: { profileId: { in: memberIds } },
+        where: { profileId: { in: memberIds }, assignmentId },
         include: {
           profile: { select: { displayName: true } },
-          assignment: { select: { title: true } },
+          assignment: { select: { title: true, content: true } },
         },
         orderBy: { submittedAt: "desc" },
       });
@@ -167,9 +233,12 @@ router.get(
         success: true,
         data: submissions.map((s) => ({
           id: s.id,
+          assignmentId: s.assignmentId,
           assignmentTitle: s.assignment.title,
           studentName: s.profile.displayName,
           content: s.content,
+          questions: contentQuestions(s.assignment.content as any),
+          maxScore: maxScoreOf(s.assignment.content as any),
           aiScore: s.aiScore,
           aiFeedback: s.aiFeedback,
           teacherScore: s.teacherScore,
@@ -271,6 +340,60 @@ router.get(
           })),
         },
       });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  }
+);
+
+// POST /api/teacher/classes/:classId/submissions/:submissionId/grade — Grade a submission
+router.post(
+  "/classes/:classId/submissions/:submissionId/grade",
+  requireAuth,
+  requireRole(["TEACHER"]),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const eduClass = await prisma.eduClass.findFirst({
+        where: { id: req.params.classId as string, teacherId: req.profileId! },
+      });
+
+      if (!eduClass) {
+        return res.status(403).json({ success: false, error: "Class not found or not yours" });
+      }
+
+      const submission = await prisma.assignmentSubmission.findUnique({
+        where: { id: req.params.submissionId as string },
+      });
+
+      if (!submission) {
+        return res.status(404).json({ success: false, error: "Submission not found" });
+      }
+
+      const isMember = await prisma.classMember.findFirst({
+        where: { classId: eduClass.id, profileId: submission.profileId },
+      });
+
+      if (!isMember) {
+        return res.status(403).json({ success: false, error: "Submission is not from a student in this class" });
+      }
+
+      const { teacherScore, teacherComment } = req.body ?? {};
+
+      if (typeof teacherScore !== "number" || teacherScore < 0 || teacherScore > 100) {
+        return res.status(400).json({ success: false, error: "teacherScore must be a number between 0 and 100" });
+      }
+
+      const updated = await prisma.assignmentSubmission.update({
+        where: { id: submission.id },
+        data: {
+          teacherScore,
+          teacherComment: typeof teacherComment === "string" && teacherComment.trim() ? teacherComment.trim() : null,
+          status: "GRADED",
+          gradedAt: new Date(),
+        },
+      });
+
+      return res.json({ success: true, data: updated });
     } catch (error: any) {
       return res.status(500).json({ success: false, error: error.message });
     }

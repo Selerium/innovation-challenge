@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { PageLoading, ErrorState } from "@/components/ui/loading";
+import { NewAssignmentModal } from "./new-assignment-modal";
 
 export default function ClassDetailPage() {
   const params = useParams<{ id: string }>();
@@ -14,6 +16,7 @@ export default function ClassDetailPage() {
   const [data, setData] = useState<any>(null);
   const [copied, setCopied] = useState(false);
   const [acting, setActing] = useState(false);
+  const [showNew, setShowNew] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,9 +88,24 @@ export default function ClassDetailPage() {
     router.push("/classes");
   }
 
+  async function handleAssignmentCreated() {
+    const result = await api(`/api/classes/${params.id}`);
+    if (result.success) {
+      setData(result.data.data);
+      toast.success("Assignment created and posted to the class");
+    }
+  }
+
   return (
     <div className="p-8">
       <div className="max-w-4xl mx-auto">
+        <NewAssignmentModal
+          classId={data.id}
+          open={showNew}
+          onClose={() => setShowNew(false)}
+          onCreated={handleAssignmentCreated}
+        />
+
         <Link href="/classes" className="text-sm text-muted-foreground hover:text-primary transition-colors">
           &larr; All classes
         </Link>
@@ -140,6 +158,62 @@ export default function ClassDetailPage() {
             </p>
           </div>
         )}
+
+        <div className="rounded-xl border border-border bg-secondary mb-6">
+          <div className="flex items-center justify-between border-b border-border px-5 py-3">
+            <h3 className="font-semibold">Assignments</h3>
+            {data.isTeacher && (
+              <button
+                onClick={() => setShowNew(true)}
+                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                + New Assignment
+              </button>
+            )}
+          </div>
+          {data.assignments.length > 0 ? (
+            <ul className="divide-y divide-border">
+              {data.assignments.map((a: any) => (
+                <li key={a.id} className="flex items-center gap-3 px-5 py-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium truncate">{a.title}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {a.description || "No description"}
+                      {a.dueDate && ` · Due ${new Date(a.dueDate).toLocaleDateString()}`}
+                    </div>
+                  </div>
+                  {data.isTeacher ? (
+                    <>
+                      <span className="text-xs text-muted-foreground">
+                        {a.questionCount ?? "—"} questions · {a.maxScore ?? "—"} marks ·{" "}
+                        {a.submissionCount} submitted · {a.gradedCount} graded
+                      </span>
+                      <Link
+                        href={`/teacher/grade-assignments?assignmentId=${a.id}`}
+                        className="rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-muted transition-colors"
+                      >
+                        Grade
+                      </Link>
+                    </>
+                  ) : (
+                    <Link
+                      href={`/assignments/${a.id}`}
+                      className="rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-muted transition-colors"
+                    >
+                      Open
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="p-10 text-center text-sm text-muted-foreground">
+              {data.isTeacher
+                ? "No assignments yet — create one for your students."
+                : "No assignments posted to this class yet."}
+            </div>
+          )}
+        </div>
 
         <div className="rounded-xl border border-border bg-secondary">
           <div className="border-b border-border px-5 py-3">

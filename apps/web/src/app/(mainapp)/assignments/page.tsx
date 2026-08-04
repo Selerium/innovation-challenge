@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useProfile } from "@/lib/profile-context";
 import { api } from "@/lib/api";
 import { PageLoading, EmptyState, ErrorState } from "@/components/ui/loading";
 
@@ -15,6 +17,27 @@ type Assignment = {
 };
 
 export default function AssignmentsPage() {
+  const router = useRouter();
+  const { user } = useProfile();
+
+  useEffect(() => {
+    if (user?.role === "TEACHER") {
+      router.replace("/teacher/grade-assignments");
+    }
+  }, [user, router]);
+
+  if (user == null) {
+    return <PageLoading />;
+  }
+
+  if (user.role === "TEACHER") {
+    return <PageLoading />;
+  }
+
+  return <StudentAssignments />;
+}
+
+function StudentAssignments() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

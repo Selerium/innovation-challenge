@@ -10,10 +10,19 @@ import { useProfile } from "@/lib/profile-context";
 type Conversation = {
   conversationId: string;
   status: string;
+  source: string;
   peer: { id: string; displayName: string; avatarUrl: string | null } | null;
   lastMessage: string | null;
   lastMessageAt: string;
   unreadCount: number;
+};
+
+type Peer = {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  role: string;
+  classes: string[];
 };
 
 type Message = {
@@ -36,6 +45,9 @@ export default function FriendsChatPage() {
   const [sending, setSending] = useState(false);
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Peer[]>([]);
+  const [searching, setSearching] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { on } = useWebSocket();
   const selectedRef = useRef(selected);
@@ -96,6 +108,66 @@ export default function FriendsChatPage() {
     return unsub;
   }, [on, loadConversations]);
 
+  // Listen for conversation_closed events (peer closed the chat)
+  useEffect(() => {
+    const unsub = on("conversation_closed", (payload) => {
+      const { conversationId } = payload as any;
+      setSelected((s) =>
+        s && s.conversationId === conversationId ? { ...s, status: "CLOSED" } : s
+      );
+      setConversations((prev) =>
+        prev.map((c) => (c.conversationId === conversationId ? { ...c, status: "CLOSED" } : c))
+      );
+    });
+    return unsub;
+  }, [on]);
+
+  // Debounced search for classmates
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults([]);
+      return;
+    }
+    const t = setTimeout(async () => {
+      setSearching(true);
+      const r = await api<{ data: Peer[] }>(`/api/chat/peers?q=${encodeURIComponent(q)}`);
+      if (r.success && r.data) setSearchResults(r.data.data);
+      setSearching(false);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  const handleAdd = async (peer: Peer) => {
+    const r = await api<{ data: Conversation }>("/api/chat/start", {
+      method: "POST",
+      body: { peerId: peer.id },
+    });
+    if (r.success && r.data) {
+      const conv = r.data.data;
+      toast.success(`Started a chat with ${peer.displayName}`);
+      setSearchQuery("");
+      setSearchResults([]);
+      await loadConversations();
+      setSelected(conv);
+    } else {
+      toast.error(r.error || "Could not start the chat.");
+    }
+  };
+
+  const handleClose = async () => {
+    if (!selected) return;
+    if (!window.confirm("Close this chat? You can start a new one with them later.")) return;
+    const r = await api(`/api/chat/${selected.conversationId}/close`, { method: "POST" });
+    if (r.success) {
+      toast.success("Chat closed");
+      setSelected((s) => (s ? { ...s, status: "CLOSED" } : s));
+      loadConversations();
+    } else {
+      toast.error(r.error || "Could not close the chat.");
+    }
+  };
+
   const handleSend = async () => {
     if (!input.trim() || !selected || sending) return;
     setSending(true);
@@ -146,6 +218,43 @@ export default function FriendsChatPage() {
         <div className="w-80 border-r border-border flex flex-col shrink-0">
           <div className="p-4 border-b border-border">
             <h2 className="text-lg font-semibold">Conversations</h2>
+            <div className="mt-3">
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search classmates..."
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            {searchQuery.trim() && (
+              <div className="mt-2 rounded-lg border border-border bg-background max-h-48 overflow-y-auto">
+                {searching ? (
+                  <div className="p-3 text-xs text-muted-foreground">Searching...</div>
+                ) : searchResults.length === 0 ? (
+                  <div className="p-3 text-xs text-muted-foreground">No users found</div>
+                ) : (
+                  searchResults.map((peer) => (
+                    <div
+                      key={peer.id}
+                      className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/50 last:border-b-0"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{peer.displayName}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">
+                          {peer.classes.join(", ")}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleAdd(peer)}
+                        className="shrink-0 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
           <div className="flex-1 overflow-y-auto">
             {loadingConvs ? (
@@ -155,7 +264,7 @@ export default function FriendsChatPage() {
               </div>
             ) : conversations.length === 0 ? (
             <div className="p-4 text-sm text-muted-foreground">
-              No conversations yet. Start a peer tutoring session to chat.
+              No conversations yet. Search for a classmate above to start chatting.
             </div>
           ) : (
             conversations.map((conv) => (
@@ -169,6 +278,11 @@ export default function FriendsChatPage() {
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-sm truncate">
                     {conv.peer?.displayName ?? "Unknown"}
+                    {conv.source === "PEER_TUTORING" && (
+                      <span className="ml-2 rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        Peer learning
+                      </span>
+                    )}
                     {conv.status === "CLOSED" && (
                       <span className="ml-2 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
                         Closed
@@ -199,8 +313,16 @@ export default function FriendsChatPage() {
       <div className="flex-1 flex flex-col">
         {selected ? (
           <>
-            <div className="p-4 border-b border-border">
+            <div className="p-4 border-b border-border flex items-center justify-between">
               <h3 className="font-semibold">{selected.peer?.displayName ?? "Unknown"}</h3>
+              {selected.status === "ACTIVE" && (
+                <button
+                  onClick={handleClose}
+                  className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                >
+                  Close chat
+                </button>
+              )}
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {loadingMessages ? (

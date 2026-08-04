@@ -44,6 +44,8 @@ export default function SignIn() {
 
     if (!sessionResult.data.data.profile.onboardingDone) {
       router.push("/onboarding");
+    } else if (sessionResult.data.data.user?.role === "TEACHER") {
+      router.push("/teacher/dashboard");
     } else {
       router.push("/dashboard");
     }

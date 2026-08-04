@@ -30,7 +30,7 @@ export default function Dashboard() {
     ]);
     if (s.success) setSubjects(s.data!.data);
     if (c.success) setClasses(c.data!.data);
-    if (a.success) setAssignments(a.data!.data);
+    if (a.success) setAssignments(a.data!.data.filter((x: any) => !x.submission));
     if (al.success) setAlerts(al.data!.data.filter((x: any) => !x.resolved));
     setLoading(false);
   }, []);
@@ -176,7 +176,7 @@ export default function Dashboard() {
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                No assignments yet — generate one from any topic in your subjects.
+                No pending assignments at the moment. Good job!
               </p>
             )}
           </div>

@@ -9,6 +9,18 @@ import { addXp, XP } from "../lib/gamification.ts";
 
 const router = express.Router();
 
+type Question = { id: string; question: string; answer: string };
+
+function normalizeQuestions(raw: any): Question[] {
+  const seen = new Set<string>();
+  return (Array.isArray(raw) ? raw : []).map((q, i) => {
+    let id = typeof q?.id === "string" && q.id ? q.id : `q${i + 1}`;
+    if (seen.has(id)) id = `q${i + 1}`;
+    seen.add(id);
+    return { id, question: q?.question ?? "", answer: q?.answer ?? "" };
+  });
+}
+
 function compactChatSummary(messages: ChatMessage[]): string {
   const lines: string[] = [];
   for (const m of messages) {
@@ -63,11 +75,11 @@ router.post("/generate", requireAuth, async (req: AuthenticatedRequest, res) => 
     try {
       const cleaned = response.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
       const parsed = JSON.parse(cleaned);
-      questions = parsed.questions || [];
+      questions = normalizeQuestions(parsed.questions);
     } catch {
-      questions = [
+      questions = normalizeQuestions([
         { id: "q1", question: "Explain the key concepts of " + topic.name, answer: response.slice(0, 500) },
-      ];
+      ]);
     }
 
     const assignment = await prisma.assignment.create({
@@ -91,12 +103,25 @@ router.post("/generate", requireAuth, async (req: AuthenticatedRequest, res) => 
 router.get("/", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const assignments = await prisma.assignment.findMany({
-      where: { creatorId: req.profileId! },
-      include: { subject: { select: { name: true, grade: true } } },
+      where: {
+        OR: [
+          { creatorId: req.profileId! },
+          { class: { member: { some: { profileId: req.profileId! } } } },
+        ],
+      },
+      include: {
+        subject: { select: { name: true, grade: true } },
+        submission: { where: { profileId: req.profileId! }, take: 1 },
+      },
       orderBy: { createdAt: "desc" },
     });
 
-    return res.json({ success: true, data: assignments });
+    const data = assignments.map((a) => ({
+      ...a,
+      submission: (a.submission as any[])[0] ?? null,
+    }));
+
+    return res.json({ success: true, data });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -106,7 +131,13 @@ router.get("/", requireAuth, async (req: AuthenticatedRequest, res) => {
 router.get("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const assignment = await prisma.assignment.findFirst({
-      where: { id: req.params.id, creatorId: req.profileId! },
+      where: {
+        id: req.params.id,
+        OR: [
+          { creatorId: req.profileId! },
+          { class: { member: { some: { profileId: req.profileId! } } } },
+        ],
+      },
       include: { subject: { select: { name: true, grade: true } } },
     });
 
@@ -118,7 +149,12 @@ router.get("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
       where: { assignmentId_profileId: { assignmentId: assignment.id, profileId: req.profileId! } },
     });
 
-    return res.json({ success: true, data: { ...assignment, submission } });
+    const content = {
+      ...(assignment.content as object),
+      questions: normalizeQuestions((assignment.content as any)?.questions),
+    };
+
+    return res.json({ success: true, data: { ...assignment, content, submission } });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -133,7 +169,13 @@ router.post("/:id/submit", requireAuth, async (req: AuthenticatedRequest, res) =
     }
 
     const assignment = await prisma.assignment.findFirst({
-      where: { id: req.params.id, creatorId: req.profileId! },
+      where: {
+        id: req.params.id,
+        OR: [
+          { creatorId: req.profileId! },
+          { class: { member: { some: { profileId: req.profileId! } } } },
+        ],
+      },
     });
 
     if (!assignment) {

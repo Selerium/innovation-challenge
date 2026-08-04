@@ -159,6 +159,8 @@ model assignment {
   subject     subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   creatorId   String
   creator     profile  @relation(fields: [creatorId], references: [id])
+  classId     String?
+  class       eduClass? @relation(fields: [classId], references: [id], onDelete: SetNull)
   title       String
   description String?
   content     Json
@@ -253,7 +255,8 @@ model eduClass {
   inviteCode String   @unique
   createdAt  DateTime @default(now())
 
-  member classMember[]
+  member      classMember[]
+  assignments assignment[]
 
   @@map("classes")
 }
@@ -277,6 +280,7 @@ model classMember {
 model conversation {
   id         String   @id @default(cuid())
   profileIds Json
+  source     String   @default("MANUAL")
   status     String   @default("ACTIVE")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

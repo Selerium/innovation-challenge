@@ -318,6 +318,9 @@ export default function SubjectDetailPage() {
                             : "bg-muted text-foreground"
                         }`}
                       >
+                        <div className={`mb-1 text-[10px] font-medium ${msg.role === "user" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                          {msg.role === "user" ? "You" : "AI Tutor"}
+                        </div>
                         {msg.content}
                       </div>
                     </div>
@@ -352,21 +355,21 @@ export default function SubjectDetailPage() {
               <button
                 onClick={handleExplain}
                 disabled={!selectedTopicId || explaining}
-                className="flex-1 rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50"
+                className="flex-1 rounded-lg border border-border px-4 py-2.5 text-sm font-medium bg-secondary hover:bg-secondary/50 transition-colors disabled:opacity-50"
               >
                 {explaining ? "Explaining..." : "Explain"}
               </button>
               <button
                 onClick={handleSuggest}
                 disabled={!selectedTopicId || suggesting}
-                className="flex-1 rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50"
+                className="flex-1 rounded-lg border border-border px-4 py-2.5 text-sm font-medium bg-secondary hover:bg-secondary/50 transition-colors disabled:opacity-50"
               >
                 {suggesting ? "Suggesting..." : "Suggest"}
               </button>
               <button
                 onClick={handleGenerate}
                 disabled={!selectedTopicId || generating}
-                className="flex-1 rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-50"
+                className="flex-1 rounded-lg border border-border px-4 py-2.5 text-sm font-medium bg-secondary hover:bg-secondary/50 transition-colors disabled:opacity-50"
               >
                 {generating ? "Generating..." : "Assignment"}
               </button>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useProfile } from "@/lib/profile-context";
 import { PageLoading, ErrorState } from "@/components/ui/loading";
+import { GradeSubmissionModal } from "../grade-submission-modal";
 
 type Student = {
   profileId: string;
@@ -21,6 +22,7 @@ type Student = {
 
 type Submission = {
   id: string;
+  assignmentId: string;
   assignmentTitle: string;
   studentName: string;
   content: string;
@@ -51,6 +53,9 @@ export default function TeacherDashboard() {
   const [detail, setDetail] = useState<StudentDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [expandingId, setExpandingId] = useState<string | null>(null);
+  const [autoClassId, setAutoClassId] = useState<string | null>(null);
+  const [autoAssignmentId, setAutoAssignmentId] = useState<string | null>(null);
+  const [gradeTarget, setGradeTarget] = useState<{ classId: string; submission: Submission } | null>(null);
 
   const loadAll = async () => {
     setLoading(true);
@@ -66,8 +71,20 @@ export default function TeacherDashboard() {
       router.push("/dashboard");
       return;
     }
+    const qs = new URLSearchParams(window.location.search);
+    const cid = qs.get("classId");
+    if (cid) {
+      setAutoClassId(cid);
+      setAutoAssignmentId(qs.get("assignmentId"));
+    }
     loadAll();
   }, [router, user]);
+
+  useEffect(() => {
+    if (autoClassId && analytics.length > 0 && expanded !== autoClassId) {
+      toggleClass(autoClassId);
+    }
+  }, [autoClassId, analytics, expanded]);
 
   async function toggleClass(classId: string) {
     if (expanded === classId) {
@@ -92,6 +109,21 @@ export default function TeacherDashboard() {
     const result = await api(`/api/teacher/students/${profileId}`);
     if (result.success) setDetail(result.data.data);
     setDetailLoading(false);
+  }
+
+  function openGrade(classId: string, s: Submission) {
+    setGradeTarget({ classId, submission: s });
+  }
+
+  async function handleGradeSaved() {
+    if (!gradeTarget) return;
+    const cid = gradeTarget.classId;
+    const [sub, an] = await Promise.all([
+      api(`/api/teacher/classes/${cid}/submissions${autoAssignmentId ? `?assignmentId=${autoAssignmentId}` : ""}`),
+      api("/api/teacher/analytics"),
+    ]);
+    if (sub.success) setSubmissions((prev) => ({ ...prev, [cid]: sub.data.data }));
+    if (an.success) setAnalytics(an.data.data);
   }
 
   const detailBody = detail ? (
@@ -286,6 +318,11 @@ export default function TeacherDashboard() {
                     )}
 
                     <h4 className="text-sm font-semibold mt-6 mb-3">Submissions</h4>
+                    {autoAssignmentId && (
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Showing submissions for the selected assignment only.
+                      </p>
+                    )}
                     {submissions[a.class.id]?.length ? (
                       <div className="overflow-x-auto rounded-lg border border-border">
                         <table className="w-full text-sm">
@@ -296,22 +333,33 @@ export default function TeacherDashboard() {
                               <th className="px-4 py-2.5 font-medium">AI Score</th>
                               <th className="px-4 py-2.5 font-medium">Teacher Score</th>
                               <th className="px-4 py-2.5 font-medium">Status</th>
+                              <th className="px-4 py-2.5 font-medium"></th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border">
-                            {submissions[a.class.id].map((s) => (
-                              <tr key={s.id} className="hover:bg-muted/50 transition-colors">
-                                <td className="px-4 py-3 font-medium">{s.assignmentTitle}</td>
-                                <td className="px-4 py-3">{s.studentName}</td>
-                                <td className="px-4 py-3">{s.aiScore ?? "—"}</td>
-                                <td className="px-4 py-3">{s.teacherScore ?? "—"}</td>
-                                <td className="px-4 py-3">
-                                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
-                                    {s.status.replace(/_/g, " ")}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
+                            {submissions[a.class.id]
+                              .filter((s) => !autoAssignmentId || s.assignmentId === autoAssignmentId)
+                              .map((s) => (
+                                <tr key={s.id} className="hover:bg-muted/50 transition-colors">
+                                  <td className="px-4 py-3 font-medium">{s.assignmentTitle}</td>
+                                  <td className="px-4 py-3">{s.studentName}</td>
+                                  <td className="px-4 py-3">{s.aiScore ?? "—"}</td>
+                                  <td className="px-4 py-3">{s.teacherScore ?? "—"}</td>
+                                  <td className="px-4 py-3">
+                                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
+                                      {s.status.replace(/_/g, " ")}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-right">
+                                    <button
+                                      onClick={() => openGrade(a.class.id, s)}
+                                      className="rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-muted transition-colors"
+                                    >
+                                      {s.teacherScore != null ? "Regrade" : "Grade"}
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
                           </tbody>
                         </table>
                       </div>
@@ -359,6 +407,13 @@ export default function TeacherDashboard() {
           </div>
         </div>
       )}
+
+      <GradeSubmissionModal
+        classId={gradeTarget?.classId ?? ""}
+        submission={gradeTarget?.submission ?? null}
+        onClose={() => setGradeTarget(null)}
+        onSaved={handleGradeSaved}
+      />
     </div>
   );
 }

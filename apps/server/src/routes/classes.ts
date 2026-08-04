@@ -165,6 +165,18 @@ router.get("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
           },
           orderBy: { id: "asc" },
         },
+        assignments: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            dueDate: true,
+            createdAt: true,
+            content: true,
+            submission: { select: { id: true, status: true } },
+          },
+          orderBy: { createdAt: "desc" },
+        },
       },
     });
 
@@ -196,8 +208,90 @@ router.get("/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
           role: m.profile.user.role,
           joinedAt: m.createdAt.toISOString(),
         })),
+        assignments: eduClass.assignments.map((a) => {
+          const rawQuestions: any[] = Array.isArray((a.content as any)?.questions) ? (a.content as any).questions : [];
+          const maxScore = rawQuestions.reduce((sum, q) => sum + (Number(q?.points) || 1), 0);
+          return {
+            id: a.id,
+            title: a.title,
+            description: a.description,
+            dueDate: a.dueDate?.toISOString() ?? null,
+            createdAt: a.createdAt.toISOString(),
+            questionCount: rawQuestions.length,
+            maxScore,
+            submissionCount: a.submission.length,
+            gradedCount: a.submission.filter((s) => s.status === "GRADED").length,
+          };
+        }),
       },
     });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/classes/:id/assignments — Teacher creates an assignment for the class
+router.post("/:id/assignments", requireAuth, requireRole(["TEACHER"]), async (req: AuthenticatedRequest, res) => {
+  try {
+    const eduClass = await prisma.eduClass.findFirst({
+      where: { id: req.params.id as string, teacherId: req.profileId! },
+    });
+
+    if (!eduClass) {
+      return res.status(403).json({ success: false, error: "Class not found or not yours" });
+    }
+
+    const { title, description, subjectName, topicName, dueDate, questions } = req.body ?? {};
+
+    if (typeof title !== "string" || !title.trim()) {
+      return res.status(400).json({ success: false, error: "Title is required" });
+    }
+
+    if (!Array.isArray(questions) || questions.length === 0) {
+      return res.status(400).json({ success: false, error: "Add at least one question" });
+    }
+
+    const seen = new Set<string>();
+    const normalized = questions
+      .filter((q: any) => q && typeof q.question === "string" && q.question.trim())
+      .map((q: any, i: number) => {
+        let id = typeof q.id === "string" && q.id ? q.id : `q${i + 1}`;
+        if (seen.has(id)) id = `q${i + 1}`;
+        seen.add(id);
+        const points = typeof q.points === "number" && Number.isFinite(q.points) && q.points > 0
+          ? Math.floor(q.points)
+          : 1;
+        return { id, question: q.question.trim(), answer: typeof q.answer === "string" ? q.answer.trim() : "", points };
+      });
+
+    if (normalized.length === 0) {
+      return res.status(400).json({ success: false, error: "Add at least one question with text" });
+    }
+
+    const teacherSubjects = await prisma.subject.findMany({
+      where: { profileId: req.profileId! },
+    });
+    const subject =
+      teacherSubjects.find((s) => s.name === subjectName) ??
+      teacherSubjects[0];
+
+    if (!subject) {
+      return res.status(400).json({ success: false, error: "Add a subject to your profile first to create assignments" });
+    }
+
+    const assignment = await prisma.assignment.create({
+      data: {
+        subjectId: subject.id,
+        creatorId: req.profileId!,
+        classId: eduClass.id,
+        title: title.trim(),
+        description: typeof description === "string" && description.trim() ? description.trim() : null,
+        dueDate: dueDate && !Number.isNaN(new Date(dueDate).getTime()) ? new Date(dueDate) : null,
+        content: { questions: normalized, topic: topicName ?? null },
+      },
+    });
+
+    return res.status(201).json({ success: true, data: assignment });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error.message });
   }

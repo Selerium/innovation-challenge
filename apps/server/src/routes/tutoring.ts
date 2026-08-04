@@ -45,7 +45,7 @@ async function tryMatch(targetId: string) {
       data: { status: "MATCHED", tutorId: match.type === "TEACH" ? match.requesterId : entry.requesterId, pairedId: entry.id, resolvedAt: new Date() },
     }),
     prisma.conversation.create({
-      data: { profileIds: [tutorId, learnerId], status: "ACTIVE" },
+      data: { profileIds: [tutorId, learnerId], status: "ACTIVE", source: "PEER_TUTORING" },
     }),
   ]);
 
@@ -200,6 +200,7 @@ router.post("/:id/close", requireAuth, async (req: AuthenticatedRequest, res) =>
         where: {
           profileIds: { array_contains: [profileId, otherId] },
           status: "ACTIVE",
+          source: "PEER_TUTORING",
         },
         data: { status: "CLOSED", closedAt: new Date() },
       });

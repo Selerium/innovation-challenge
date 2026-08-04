@@ -12,6 +12,7 @@ type Question = {
   id: string;
   question: string;
   answer: string;
+  points?: number;
 };
 
 type Assignment = {
@@ -152,13 +153,20 @@ export default function AssignmentDetailPage() {
           </div>
         </div>
 
-        {questions.length > 0 ? (
+          {questions.length > 0 ? (
           <form onSubmit={handleSubmit} className="space-y-4">
           {assignment.content.questions.map((q, i) => (
             <div key={q.id} className="rounded-xl border border-border bg-secondary p-5">
-              <label className="text-sm font-medium mb-2 block">
-                {i + 1}. {q.question}
-              </label>
+              <div className="flex items-start justify-between gap-3">
+                <label className="text-sm font-medium mb-2 block">
+                  {i + 1}. {q.question}
+                </label>
+                {q.points != null && (
+                  <span className="shrink-0 rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                    {q.points} marks
+                  </span>
+                )}
+              </div>
               <textarea
                 value={answers[q.id] || ""}
                 onChange={(e) => setAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
@@ -181,7 +189,7 @@ export default function AssignmentDetailPage() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                className="rounded-lg bg-secondary px-6 py-2.5 text-sm font-medium hover:bg-secondary/50 text-white disabled:opacity-50 transition-colors"
               >
                 {submitting ? "Submitting..." : "Submit Answers"}
               </button>
