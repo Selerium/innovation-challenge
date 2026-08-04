@@ -10,6 +10,12 @@ export async function api<T = any>(
   path: string,
   options: FetchOptions = {}
 ): Promise<{ success: boolean; data?: T; error?: string }> {
+  if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+    const { demoApi } = await import("@/lib/demo");
+    const result = await demoApi(path, options);
+    return result as { success: boolean; data?: T; error?: string };
+  }
+
   const { method = "GET", body, headers = {} } = options;
 
   let res: Response;

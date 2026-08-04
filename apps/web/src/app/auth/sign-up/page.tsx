@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { getDemoRole } from "@/lib/demo/role";
+import { PageLoading } from "@/components/ui/loading";
 
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+
+const DEMO = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
 export default function SignUp() {
   const router = useRouter();
@@ -14,6 +18,16 @@ export default function SignUp() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (DEMO) {
+      router.replace(getDemoRole() === "TEACHER" ? "/teacher/dashboard" : "/dashboard");
+    }
+  }, [router]);
+
+  if (DEMO) {
+    return <PageLoading />;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

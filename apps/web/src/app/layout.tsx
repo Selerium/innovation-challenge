@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Toaster } from "sonner";
 import "./globals.css";
 import { ThemeProvider } from "@/lib/theme";
+import { DemoBanner } from "@/components/layout/demo-banner";
 import { cn } from "@/lib/utils";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
@@ -39,6 +40,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen antialiased">
         <ThemeProvider>
+          <DemoBanner />
           {children}
           <Toaster richColors position="top-right" />
         </ThemeProvider>

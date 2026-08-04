@@ -36,6 +36,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") return;
     let mounted = true;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
 

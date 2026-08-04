@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { PageLoading, ErrorState } from "@/components/ui/loading";
 import { NewAssignmentModal } from "./new-assignment-modal";
+import { DEMO_DISABLED_MESSAGE } from "@/lib/demo/role";
 
 export default function ClassDetailPage() {
   const params = useParams<{ id: string }>();
@@ -76,6 +77,10 @@ export default function ClassDetailPage() {
   }
 
   async function handleLeave() {
+    if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+      toast.info(DEMO_DISABLED_MESSAGE);
+      return;
+    }
     setActing(true);
     await api(`/api/classes/${data.id}/leave`, { method: "POST" });
     router.push("/classes");
@@ -83,6 +88,10 @@ export default function ClassDetailPage() {
 
   async function handleDelete() {
     if (!confirm(`Delete "${data.name}" and remove all members?`)) return;
+    if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+      toast.info(DEMO_DISABLED_MESSAGE);
+      return;
+    }
     setActing(true);
     await api(`/api/classes/${data.id}`, { method: "DELETE" });
     router.push("/classes");

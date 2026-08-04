@@ -19,6 +19,10 @@ export default function Onboarding() {
 
   useEffect(() => {
     async function checkSession() {
+      if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+        router.replace("/dashboard");
+        return;
+      }
       const sessionResult = await api("/api/session");
       if (!sessionResult.success || !sessionResult.data?.data?.profile) {
         router.replace("/auth/sign-in");

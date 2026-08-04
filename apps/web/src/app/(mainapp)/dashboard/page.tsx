@@ -9,6 +9,8 @@ import { levelProgress } from "@repo/shared";
 import { AddSubjectModal } from "@/components/subjects/add-subject-modal";
 import { JoinClassModal } from "@/components/classes/class-modals";
 import { SkeletonRows } from "@/components/ui/loading";
+import { toast } from "sonner";
+import { DEMO_DISABLED_MESSAGE } from "@/lib/demo/role";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -43,6 +45,10 @@ export default function Dashboard() {
   const { level, xpIntoLevel, xpForCurrentLevel, nextLevelAt, progress: levelProgressPct } = levelProgress(xp);
 
   async function handleSignOut() {
+    if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+      toast.info(DEMO_DISABLED_MESSAGE);
+      return;
+    }
     await api("/api/auth/sign-out", { method: "POST" });
     router.push("/auth/sign-in");
   }
